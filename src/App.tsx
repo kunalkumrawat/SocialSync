@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore, View } from './stores/appStore'
 
 function App() {
@@ -19,13 +19,25 @@ function App() {
     window.electronAPI?.getVersion().then(setAppVersion).catch(console.error)
 
     // Load accounts
-    window.electronAPI?.getAccounts().then((accts) => {
-      setAccounts(accts as typeof accounts)
-    }).catch(console.error)
+    const loadAccounts = () => {
+      window.electronAPI?.getAccounts().then((accts) => {
+        setAccounts(accts as typeof accounts)
+      }).catch(console.error)
+    }
+    loadAccounts()
 
     // Listen for scheduler toggle from tray
     window.electronAPI?.onSchedulerToggle((paused) => {
       setSchedulerPaused(paused)
+    })
+
+    // Listen for account changes
+    window.electronAPI?.onAccountConnected(() => {
+      loadAccounts() // Reload accounts when one is connected
+    })
+
+    window.electronAPI?.onAccountDisconnected(() => {
+      loadAccounts() // Reload accounts when one is disconnected
     })
   }, [setAppVersion, setAccounts, setSchedulerPaused])
 
@@ -315,9 +327,22 @@ function SettingsView({
   accounts: { id: string; platform: string; account_name: string }[]
   isConnected: (platform: string) => boolean
 }) {
+  const [connecting, setConnecting] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
   const handleConnect = async (platform: string) => {
-    const result = await window.electronAPI?.connectAccount(platform)
-    console.log('Connect result:', result)
+    setConnecting(platform)
+    setError(null)
+    try {
+      const result = await window.electronAPI?.connectAccount(platform) as { error?: string }
+      if (result?.error) {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Connection failed')
+    } finally {
+      setConnecting(null)
+    }
   }
 
   const handleDisconnect = async (accountId: string) => {
@@ -326,6 +351,18 @@ function SettingsView({
 
   return (
     <div className="space-y-6 max-w-2xl">
+      {error && (
+        <div className="bg-red-900/50 border border-red-700 rounded-lg p-4">
+          <p className="text-red-400 text-sm">{error}</p>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-300 text-xs mt-2 hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="bg-gray-800 rounded-lg p-6">
         <h3 className="text-lg font-semibold mb-4">Connected Accounts</h3>
         <div className="space-y-3">
@@ -333,6 +370,7 @@ function SettingsView({
             name="Google Drive"
             icon="📁"
             connected={isConnected('google')}
+            connecting={connecting === 'google'}
             account={accounts.find((a) => a.platform === 'google')}
             onConnect={() => handleConnect('google')}
             onDisconnect={handleDisconnect}
@@ -341,6 +379,7 @@ function SettingsView({
             name="Instagram"
             icon="📸"
             connected={isConnected('instagram')}
+            connecting={connecting === 'instagram'}
             account={accounts.find((a) => a.platform === 'instagram')}
             onConnect={() => handleConnect('instagram')}
             onDisconnect={handleDisconnect}
@@ -349,6 +388,7 @@ function SettingsView({
             name="YouTube"
             icon="🎬"
             connected={isConnected('youtube')}
+            connecting={connecting === 'youtube'}
             account={accounts.find((a) => a.platform === 'youtube')}
             onConnect={() => handleConnect('youtube')}
             onDisconnect={handleDisconnect}
@@ -391,6 +431,7 @@ function AccountRow({
   name,
   icon,
   connected,
+  connecting,
   account,
   onConnect,
   onDisconnect,
@@ -398,6 +439,7 @@ function AccountRow({
   name: string
   icon: string
   connected: boolean
+  connecting: boolean
   account?: { id: string; account_name: string }
   onConnect: () => void
   onDisconnect: (id: string) => void
@@ -411,17 +453,23 @@ function AccountRow({
           {connected && account && (
             <p className="text-sm text-gray-400">{account.account_name}</p>
           )}
+          {connecting && (
+            <p className="text-sm text-blue-400">Waiting for authorization...</p>
+          )}
         </div>
       </div>
       <button
         onClick={() => (connected && account ? onDisconnect(account.id) : onConnect())}
+        disabled={connecting}
         className={`px-4 py-1.5 rounded text-sm font-medium ${
-          connected
+          connecting
+            ? 'bg-gray-600 cursor-wait'
+            : connected
             ? 'bg-red-600 hover:bg-red-700'
             : 'bg-blue-600 hover:bg-blue-700'
-        } transition-colors`}
+        } transition-colors disabled:opacity-50`}
       >
-        {connected ? 'Disconnect' : 'Connect'}
+        {connecting ? 'Connecting...' : connected ? 'Disconnect' : 'Connect'}
       </button>
     </div>
   )

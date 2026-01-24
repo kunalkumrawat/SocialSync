@@ -2,10 +2,16 @@ import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import path from 'path'
 import { getDatabase } from './services/database/DatabaseService'
 import { getSettings } from './services/settings/SettingsService'
+import { getGoogleAuth, getYouTubeAuth, getInstagramAuth } from './services/auth'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (require('electron-squirrel-startup')) {
-  app.quit()
+// Only applies to Windows builds with Squirrel installer
+try {
+  if (process.platform === 'win32' && require('electron-squirrel-startup')) {
+    app.quit()
+  }
+} catch {
+  // electron-squirrel-startup not available in dev mode
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -176,21 +182,79 @@ ipcMain.handle('settings:save', async (_event, newSettings) => {
   await settings.saveAll(newSettings)
 })
 
-// Accounts (placeholder - to be implemented in Epic 2)
+// Accounts
 ipcMain.handle('accounts:getAll', async () => {
   const db = getDatabase()
   return db.all('SELECT * FROM accounts ORDER BY connected_at DESC')
 })
 
 ipcMain.handle('accounts:connect', async (_event, platform: string) => {
-  // TODO: Implement OAuth flow in Epic 2
   console.log(`[IPC] Connect account request for: ${platform}`)
-  return { error: 'Not implemented yet' }
+
+  try {
+    let authService
+    switch (platform) {
+      case 'google':
+        authService = getGoogleAuth()
+        break
+      case 'youtube':
+        authService = getYouTubeAuth()
+        break
+      case 'instagram':
+        authService = getInstagramAuth()
+        break
+      default:
+        throw new Error(`Unknown platform: ${platform}`)
+    }
+
+    const account = await authService.authenticate()
+    console.log(`[IPC] Successfully connected ${platform} account:`, account.accountName)
+
+    // Notify renderer of success
+    mainWindow?.webContents.send('accounts:connected', account)
+
+    return account
+  } catch (error) {
+    console.error(`[IPC] Failed to connect ${platform}:`, error)
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return { error: message }
+  }
 })
 
 ipcMain.handle('accounts:disconnect', async (_event, accountId: string) => {
   const db = getDatabase()
+
+  // Get account info first to determine platform
+  const account = db.get<{ platform: string; account_id: string }>(
+    'SELECT platform, account_id FROM accounts WHERE id = ?',
+    [accountId]
+  )
+
+  if (account) {
+    // Remove tokens
+    let authService
+    switch (account.platform) {
+      case 'google':
+        authService = getGoogleAuth()
+        break
+      case 'youtube':
+        authService = getYouTubeAuth()
+        break
+      case 'instagram':
+        authService = getInstagramAuth()
+        break
+    }
+
+    if (authService) {
+      await authService.disconnect(account.account_id)
+    }
+  }
+
+  // Remove from database
   db.run('DELETE FROM accounts WHERE id = ?', [accountId])
+
+  // Notify renderer
+  mainWindow?.webContents.send('accounts:disconnected', accountId)
 })
 
 // Drive (placeholder - to be implemented in Epic 3)

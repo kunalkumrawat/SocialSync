@@ -2,6 +2,8 @@ export interface ElectronAPI {
   getVersion: () => Promise<string>
   getPlatform: () => Promise<string>
   onSchedulerToggle: (callback: (paused: boolean) => void) => void
+  onAccountConnected: (callback: (account: unknown) => void) => void
+  onAccountDisconnected: (callback: (accountId: string) => void) => void
   getSettings: () => Promise<unknown>
   saveSettings: (settings: unknown) => Promise<void>
   getAccounts: () => Promise<unknown[]>

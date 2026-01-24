@@ -11,6 +11,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSchedulerToggle: (callback: (paused: boolean) => void) => {
     ipcRenderer.on('scheduler:toggle', (_event, paused) => callback(paused))
   },
+  onAccountConnected: (callback: (account: unknown) => void) => {
+    ipcRenderer.on('accounts:connected', (_event, account) => callback(account))
+  },
+  onAccountDisconnected: (callback: (accountId: string) => void) => {
+    ipcRenderer.on('accounts:disconnected', (_event, accountId) => callback(accountId))
+  },
 
   // Settings (to be implemented)
   getSettings: () => ipcRenderer.invoke('settings:get'),
