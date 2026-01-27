@@ -21,9 +21,26 @@ export interface ElectronAPI {
   getQueue: (platform: string) => Promise<unknown[]>
   skipQueueItem: (itemId: string) => Promise<void>
   retryQueueItem: (itemId: string) => Promise<void>
+  deleteQueueItem: (itemId: string) => Promise<void>
+  rescheduleQueueItem: (itemId: string, newTime: string) => Promise<void>
+  getQueueStats: () => Promise<{
+    total: number
+    pending: number
+    processing: number
+    posted: number
+    failed: number
+    skipped: number
+  }>
+  clearCompletedQueue: () => Promise<number>
+  onQueueUpdated: (callback: () => void) => void
   getSchedules: () => Promise<unknown[]>
-  saveSchedule: (schedule: unknown) => Promise<void>
+  getScheduleForPlatform: (platform: string) => Promise<unknown | null>
+  saveSchedule: (schedule: unknown) => Promise<{ success?: boolean; error?: string; scheduleId?: string }>
   toggleSchedule: (platform: string, enabled: boolean) => Promise<void>
+  deleteSchedule: (scheduleId: string) => Promise<void>
+  generateQueueFromSchedule: (daysAhead?: number) => Promise<{ instagram: number; youtube: number }>
+  getNextScheduledTime: (platform: string) => Promise<Date | null>
+  onScheduleUpdated: (callback: () => void) => void
   getActivityLog: (limit?: number) => Promise<unknown[]>
 }
 

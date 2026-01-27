@@ -44,16 +44,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('drive:scanComplete', (_event, result) => callback(result))
   },
 
-  // Queue (to be implemented)
+  // Queue
   getQueue: (platform: string) => ipcRenderer.invoke('queue:get', platform),
   skipQueueItem: (itemId: string) => ipcRenderer.invoke('queue:skip', itemId),
   retryQueueItem: (itemId: string) => ipcRenderer.invoke('queue:retry', itemId),
+  deleteQueueItem: (itemId: string) => ipcRenderer.invoke('queue:delete', itemId),
+  rescheduleQueueItem: (itemId: string, newTime: string) =>
+    ipcRenderer.invoke('queue:reschedule', itemId, newTime),
+  getQueueStats: () => ipcRenderer.invoke('queue:getStats'),
+  clearCompletedQueue: () => ipcRenderer.invoke('queue:clearCompleted'),
+  onQueueUpdated: (callback: () => void) => {
+    ipcRenderer.on('queue:updated', () => callback())
+  },
 
-  // Schedule (to be implemented)
+  // Schedule
   getSchedules: () => ipcRenderer.invoke('schedule:getAll'),
+  getScheduleForPlatform: (platform: string) =>
+    ipcRenderer.invoke('schedule:getForPlatform', platform),
   saveSchedule: (schedule: unknown) => ipcRenderer.invoke('schedule:save', schedule),
   toggleSchedule: (platform: string, enabled: boolean) =>
     ipcRenderer.invoke('schedule:toggle', platform, enabled),
+  deleteSchedule: (scheduleId: string) => ipcRenderer.invoke('schedule:delete', scheduleId),
+  generateQueueFromSchedule: (daysAhead?: number) =>
+    ipcRenderer.invoke('schedule:generateQueue', daysAhead),
+  getNextScheduledTime: (platform: string) =>
+    ipcRenderer.invoke('schedule:getNextTime', platform),
+  onScheduleUpdated: (callback: () => void) => {
+    ipcRenderer.on('schedule:updated', () => callback())
+  },
 
   // Activity (to be implemented)
   getActivityLog: (limit?: number) => ipcRenderer.invoke('activity:get', limit),

@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useAppStore, View } from './stores/appStore'
 
+interface QueueItem {
+  id: string
+  content_id: string
+  platform: 'instagram' | 'youtube'
+  filename?: string
+  mime_type?: string
+  scheduled_for: string
+  status: 'pending' | 'processing' | 'posted' | 'failed' | 'skipped'
+  attempts: number
+  last_error: string | null
+}
+
 function App() {
   const {
     currentView,
@@ -189,38 +201,110 @@ function StatCard({
 }
 
 function QueueView() {
-  const { instagramQueue, youtubeQueue } = useAppStore()
+  const [selectedPlatform, setSelectedPlatform] = useState<'instagram' | 'youtube'>('instagram')
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const loadQueue = async (platform: 'instagram' | 'youtube') => {
+    setLoading(true)
+    const items = await window.electronAPI?.getQueue(platform)
+    if (items && Array.isArray(items)) {
+      setQueueItems(items as QueueItem[])
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    loadQueue(selectedPlatform)
+
+    // Listen for queue updates
+    window.electronAPI?.onQueueUpdated(() => {
+      loadQueue(selectedPlatform)
+    })
+  }, [selectedPlatform])
+
+  const handlePlatformSwitch = (platform: 'instagram' | 'youtube') => {
+    setSelectedPlatform(platform)
+    loadQueue(platform)
+  }
+
+  const handleRefresh = () => {
+    loadQueue(selectedPlatform)
+  }
+
+  const handleSkip = async (itemId: string) => {
+    await window.electronAPI?.skipQueueItem(itemId)
+  }
+
+  const handleRetry = async (itemId: string) => {
+    await window.electronAPI?.retryQueueItem(itemId)
+  }
+
+  const handleDelete = async (itemId: string) => {
+    if (confirm('Are you sure you want to remove this item from the queue?')) {
+      await window.electronAPI?.deleteQueueItem(itemId)
+    }
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex gap-4 border-b border-gray-700 pb-4">
-        <button className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-          Instagram ({instagramQueue.length})
+        <button
+          onClick={() => handlePlatformSwitch('instagram')}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            selectedPlatform === 'instagram'
+              ? 'bg-blue-600'
+              : 'bg-gray-700 hover:bg-gray-600'
+          }`}
+        >
+          📸 Instagram ({queueItems.filter(() => selectedPlatform === 'instagram').length})
         </button>
-        <button className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors">
-          YouTube ({youtubeQueue.length})
+        <button
+          onClick={() => handlePlatformSwitch('youtube')}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            selectedPlatform === 'youtube'
+              ? 'bg-blue-600'
+              : 'bg-gray-700 hover:bg-gray-600'
+          }`}
+        >
+          🎬 YouTube ({queueItems.filter(() => selectedPlatform === 'youtube').length})
         </button>
       </div>
 
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Content Queue</h3>
-          <button className="px-3 py-1 text-sm bg-gray-700 rounded hover:bg-gray-600 transition-colors">
-            Refresh
+          <h3 className="text-lg font-semibold">
+            {selectedPlatform === 'instagram' ? 'Instagram' : 'YouTube'} Queue
+          </h3>
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="px-3 py-1 text-sm bg-gray-700 rounded hover:bg-gray-600 transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Loading...' : 'Refresh'}
           </button>
         </div>
 
-        {instagramQueue.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-8 text-gray-400">Loading queue...</div>
+        ) : queueItems.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-400 mb-4">No items in queue.</p>
             <p className="text-gray-500 text-sm">
-              Connect Google Drive and add folders to start queuing content.
+              Go to Schedule tab to configure automated posting times.
             </p>
           </div>
         ) : (
           <div className="space-y-2">
-            {instagramQueue.map((item) => (
-              <QueueItemRow key={item.id} item={item} />
+            {queueItems.map((item) => (
+              <QueueItemRow
+                key={item.id}
+                item={item}
+                platform={selectedPlatform}
+                onSkip={handleSkip}
+                onRetry={handleRetry}
+                onDelete={handleDelete}
+              />
             ))}
           </div>
         )}
@@ -229,16 +313,38 @@ function QueueView() {
   )
 }
 
-function QueueItemRow({ item }: { item: { id: string; filename?: string; scheduled_for: string; status: string } }) {
+function QueueItemRow({
+  item,
+  platform,
+  onSkip,
+  onRetry,
+  onDelete,
+}: {
+  item: QueueItem
+  platform: 'instagram' | 'youtube'
+  onSkip: (id: string) => void
+  onRetry: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  const isPast = new Date(item.scheduled_for) < new Date()
+  const isUpcoming = new Date(item.scheduled_for) > new Date()
+
   return (
     <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">🎬</span>
-        <div>
+      <div className="flex items-center gap-3 flex-1">
+        <span className="text-2xl">{platform === 'instagram' ? '📸' : '🎬'}</span>
+        <div className="flex-1">
           <p className="font-medium">{item.filename || 'Unknown file'}</p>
           <p className="text-sm text-gray-400">
             Scheduled: {new Date(item.scheduled_for).toLocaleString()}
+            {isPast && item.status === 'pending' && (
+              <span className="ml-2 text-yellow-400">(Overdue)</span>
+            )}
+            {isUpcoming && <span className="ml-2 text-blue-400">(Upcoming)</span>}
           </p>
+          {item.last_error && (
+            <p className="text-xs text-red-400 mt-1">Error: {item.last_error}</p>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -246,6 +352,8 @@ function QueueItemRow({ item }: { item: { id: string; filename?: string; schedul
           className={`px-2 py-1 text-xs rounded ${
             item.status === 'pending'
               ? 'bg-yellow-600'
+              : item.status === 'processing'
+              ? 'bg-blue-600'
               : item.status === 'posted'
               ? 'bg-green-600'
               : 'bg-red-600'
@@ -253,7 +361,31 @@ function QueueItemRow({ item }: { item: { id: string; filename?: string; schedul
         >
           {item.status}
         </span>
-        <button className="p-1 hover:bg-gray-600 rounded">⏭️</button>
+        {item.status === 'pending' && (
+          <button
+            onClick={() => onSkip(item.id)}
+            className="p-1 hover:bg-gray-600 rounded text-sm"
+            title="Skip this post"
+          >
+            ⏭️
+          </button>
+        )}
+        {item.status === 'failed' && (
+          <button
+            onClick={() => onRetry(item.id)}
+            className="p-1 hover:bg-gray-600 rounded text-sm"
+            title="Retry posting"
+          >
+            🔄
+          </button>
+        )}
+        <button
+          onClick={() => onDelete(item.id)}
+          className="p-1 hover:bg-gray-600 rounded text-sm text-red-400"
+          title="Remove from queue"
+        >
+          🗑️
+        </button>
       </div>
     </div>
   )
@@ -601,63 +733,241 @@ function ContentView({ isConnected }: { isConnected: (platform: string) => boole
 }
 
 function ScheduleView() {
+  const { accounts } = useAppStore()
+  const [instagramSchedule, setInstagramSchedule] = useState<Schedule | null>(null)
+  const [youtubeSchedule, setYoutubeSchedule] = useState<Schedule | null>(null)
+
+  const loadSchedules = async () => {
+    const igSchedule = await window.electronAPI?.getScheduleForPlatform('instagram')
+    const ytSchedule = await window.electronAPI?.getScheduleForPlatform('youtube')
+    setInstagramSchedule(igSchedule as Schedule | null)
+    setYoutubeSchedule(ytSchedule as Schedule | null)
+  }
+
+  useEffect(() => {
+    loadSchedules()
+
+    // Listen for schedule updates
+    window.electronAPI?.onScheduleUpdated(() => {
+      loadSchedules()
+    })
+  }, [])
+
+  const getAccountForPlatform = (platform: 'instagram' | 'youtube') => {
+    return accounts.find((a) => a.platform === platform)
+  }
+
   return (
     <div className="space-y-6">
-      <div className="bg-gray-800 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <span>📸</span> Instagram Schedule
-          </h3>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="w-4 h-4 accent-blue-500" />
-            <span className="text-sm">Enabled</span>
-          </label>
-        </div>
-        <p className="text-gray-400 mb-4">Connect Instagram to configure schedule.</p>
-        <ScheduleGrid />
-      </div>
-
-      <div className="bg-gray-800 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <span>🎬</span> YouTube Schedule
-          </h3>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="w-4 h-4 accent-blue-500" />
-            <span className="text-sm">Enabled</span>
-          </label>
-        </div>
-        <p className="text-gray-400 mb-4">Connect YouTube to configure schedule.</p>
-        <ScheduleGrid />
-      </div>
+      <PlatformSchedule
+        platform="instagram"
+        icon="📸"
+        label="Instagram"
+        account={getAccountForPlatform('instagram')}
+        schedule={instagramSchedule}
+        onScheduleChange={loadSchedules}
+      />
+      <PlatformSchedule
+        platform="youtube"
+        icon="🎬"
+        label="YouTube"
+        account={getAccountForPlatform('youtube')}
+        schedule={youtubeSchedule}
+        onScheduleChange={loadSchedules}
+      />
     </div>
   )
 }
 
-function ScheduleGrid() {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+interface Schedule {
+  id?: string
+  platform: 'instagram' | 'youtube'
+  account_id: string
+  days_of_week: number[]
+  times: string[]
+  timezone: string
+  enabled: boolean
+}
+
+function PlatformSchedule({
+  platform,
+  icon,
+  label,
+  account,
+  schedule,
+  onScheduleChange,
+}: {
+  platform: 'instagram' | 'youtube'
+  icon: string
+  label: string
+  account?: { id: string; account_id: string; account_name: string }
+  schedule: Schedule | null
+  onScheduleChange: () => void
+}) {
+  const [selectedDays, setSelectedDays] = useState<number[]>(schedule?.days_of_week || [])
+  const [times, setTimes] = useState<string[]>(schedule?.times || [])
+  const [enabled, setEnabled] = useState(schedule?.enabled || false)
+  const [newTime, setNewTime] = useState('09:00')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (schedule) {
+      setSelectedDays(schedule.days_of_week)
+      setTimes(schedule.times)
+      setEnabled(schedule.enabled)
+    }
+  }, [schedule])
+
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+  const toggleDay = (day: number) => {
+    setSelectedDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
+    )
+  }
+
+  const addTime = () => {
+    if (newTime && !times.includes(newTime)) {
+      setTimes([...times, newTime].sort())
+      setNewTime('09:00')
+    }
+  }
+
+  const removeTime = (time: string) => {
+    setTimes(times.filter((t) => t !== time))
+  }
+
+  const handleSave = async () => {
+    if (!account) return
+
+    setSaving(true)
+    const scheduleData: Schedule = {
+      id: schedule?.id,
+      platform,
+      account_id: account.account_id,
+      days_of_week: selectedDays,
+      times,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      enabled,
+    }
+
+    const result = await window.electronAPI?.saveSchedule(scheduleData)
+    if (result?.error) {
+      alert(`Error: ${result.error}`)
+    } else {
+      onScheduleChange()
+    }
+    setSaving(false)
+  }
+
+  const handleToggle = async () => {
+    const newEnabled = !enabled
+    setEnabled(newEnabled)
+    await window.electronAPI?.toggleSchedule(platform, newEnabled)
+  }
+
+  if (!account) {
+    return (
+      <div className="bg-gray-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
+          <span>{icon}</span> {label} Schedule
+        </h3>
+        <p className="text-gray-400">
+          Connect {label} account in Settings to configure posting schedule.
+        </p>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        {days.map((day) => (
-          <button
-            key={day}
-            className="px-3 py-2 bg-gray-700 rounded hover:bg-gray-600 transition-colors text-sm"
-          >
-            {day}
-          </button>
-        ))}
+    <div className="bg-gray-800 rounded-lg p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <span>{icon}</span> {label} Schedule
+        </h3>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={handleToggle}
+            className="w-4 h-4 accent-blue-500"
+          />
+          <span className="text-sm">{enabled ? 'Enabled' : 'Disabled'}</span>
+        </label>
       </div>
-      <div className="flex gap-2 items-center">
-        <input
-          type="time"
-          className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-          defaultValue="09:00"
-        />
-        <button className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-700 transition-colors text-sm">
-          Add Time
-        </button>
+
+      <div className="space-y-4">
+        {/* Day selection */}
+        <div>
+          <label className="text-sm text-gray-400 mb-2 block">Post on days:</label>
+          <div className="flex gap-2 flex-wrap">
+            {dayNames.map((day, index) => (
+              <button
+                key={day}
+                onClick={() => toggleDay(index)}
+                className={`px-3 py-2 rounded transition-colors text-sm ${
+                  selectedDays.includes(index)
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                {day}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Time selection */}
+        <div>
+          <label className="text-sm text-gray-400 mb-2 block">Post at times:</label>
+          <div className="flex gap-2 items-center mb-2">
+            <input
+              type="time"
+              value={newTime}
+              onChange={(e) => setNewTime(e.target.value)}
+              className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
+            />
+            <button
+              onClick={addTime}
+              className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-700 transition-colors text-sm"
+            >
+              Add Time
+            </button>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {times.map((time) => (
+              <span
+                key={time}
+                className="px-3 py-1.5 bg-gray-700 rounded text-sm flex items-center gap-2"
+              >
+                {time}
+                <button
+                  onClick={() => removeTime(time)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Save button */}
+        <div className="pt-2">
+          <button
+            onClick={handleSave}
+            disabled={saving || selectedDays.length === 0 || times.length === 0}
+            className="px-4 py-2 bg-green-600 rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Saving...' : 'Save Schedule'}
+          </button>
+          {selectedDays.length === 0 && (
+            <p className="text-sm text-yellow-400 mt-2">Select at least one day</p>
+          )}
+          {times.length === 0 && (
+            <p className="text-sm text-yellow-400 mt-2">Add at least one time slot</p>
+          )}
+        </div>
       </div>
     </div>
   )

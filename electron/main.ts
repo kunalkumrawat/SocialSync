@@ -5,6 +5,8 @@ import { getSettings } from './services/settings/SettingsService'
 import { getGoogleAuth, getYouTubeAuth, getInstagramAuth } from './services/auth'
 import { getDriveService } from './services/drive'
 import { getContentScheduler } from './services/scheduler'
+import { getQueueService } from './services/queue'
+import { getScheduleService } from './services/schedule'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only applies to Windows builds with Squirrel installer
@@ -393,69 +395,102 @@ ipcMain.handle('drive:getThumbnail', async (_event, fileId: string) => {
   }
 })
 
-// Queue (placeholder - to be implemented in Epic 4)
+// Queue
 ipcMain.handle('queue:get', async (_event, platform: string) => {
-  const db = getDatabase()
-  return db.all(
-    `SELECT q.*, c.filename, c.mime_type
-     FROM queue q
-     LEFT JOIN content_items c ON q.content_id = c.id
-     WHERE q.platform = ? AND q.status IN ('pending', 'processing')
-     ORDER BY q.scheduled_for ASC`,
-    [platform]
-  )
+  const queueService = getQueueService()
+  return queueService.getQueueForPlatform(platform as 'instagram' | 'youtube')
 })
 
 ipcMain.handle('queue:skip', async (_event, itemId: string) => {
-  const db = getDatabase()
-  db.run("UPDATE queue SET status = 'skipped' WHERE id = ?", [itemId])
+  const queueService = getQueueService()
+  queueService.skipQueueItem(itemId)
+  mainWindow?.webContents.send('queue:updated')
 })
 
 ipcMain.handle('queue:retry', async (_event, itemId: string) => {
-  const db = getDatabase()
-  db.run("UPDATE queue SET status = 'pending', attempts = 0, last_error = NULL WHERE id = ?", [
-    itemId,
-  ])
+  const queueService = getQueueService()
+  queueService.retryQueueItem(itemId)
+  mainWindow?.webContents.send('queue:updated')
 })
 
-// Schedule (placeholder - to be implemented in Epic 5)
+ipcMain.handle('queue:delete', async (_event, itemId: string) => {
+  const queueService = getQueueService()
+  queueService.deleteQueueItem(itemId)
+  mainWindow?.webContents.send('queue:updated')
+})
+
+ipcMain.handle('queue:reschedule', async (_event, itemId: string, newTime: string) => {
+  const queueService = getQueueService()
+  queueService.rescheduleQueueItem(itemId, new Date(newTime))
+  mainWindow?.webContents.send('queue:updated')
+})
+
+ipcMain.handle('queue:getStats', async () => {
+  const queueService = getQueueService()
+  return queueService.getQueueStats()
+})
+
+ipcMain.handle('queue:clearCompleted', async () => {
+  const queueService = getQueueService()
+  const count = queueService.clearCompletedItems()
+  mainWindow?.webContents.send('queue:updated')
+  return count
+})
+
+// Schedule
 ipcMain.handle('schedule:getAll', async () => {
-  const db = getDatabase()
-  return db.all('SELECT * FROM schedules ORDER BY platform')
+  const scheduleService = getScheduleService()
+  return scheduleService.getAllSchedules()
+})
+
+ipcMain.handle('schedule:getForPlatform', async (_event, platform: string) => {
+  const scheduleService = getScheduleService()
+  return scheduleService.getScheduleForPlatform(platform as 'instagram' | 'youtube')
 })
 
 ipcMain.handle('schedule:save', async (_event, schedule) => {
-  const db = getDatabase()
-  const { id, platform, account_id, days_of_week, times, timezone, enabled } = schedule
+  const scheduleService = getScheduleService()
 
-  if (id) {
-    db.run(
-      `UPDATE schedules
-       SET days_of_week = ?, times = ?, timezone = ?, enabled = ?
-       WHERE id = ?`,
-      [JSON.stringify(days_of_week), JSON.stringify(times), timezone, enabled ? 1 : 0, id]
-    )
-  } else {
-    const newId = crypto.randomUUID()
-    db.run(
-      `INSERT INTO schedules (id, platform, account_id, days_of_week, times, timezone, enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        newId,
-        platform,
-        account_id,
-        JSON.stringify(days_of_week),
-        JSON.stringify(times),
-        timezone,
-        enabled ? 1 : 0,
-      ]
-    )
+  // Validate schedule
+  const validation = scheduleService.validateSchedule(schedule)
+  if (!validation.valid) {
+    return { error: validation.errors.join(', ') }
   }
+
+  const scheduleId = scheduleService.saveSchedule(schedule)
+
+  // Generate queue items for the next week
+  if (schedule.enabled) {
+    const queueService = getQueueService()
+    queueService.generateQueueFromSchedule(scheduleId, new Date(), new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
+  }
+
+  mainWindow?.webContents.send('schedule:updated')
+  return { success: true, scheduleId }
 })
 
 ipcMain.handle('schedule:toggle', async (_event, platform: string, enabled: boolean) => {
-  const db = getDatabase()
-  db.run('UPDATE schedules SET enabled = ? WHERE platform = ?', [enabled ? 1 : 0, platform])
+  const scheduleService = getScheduleService()
+  scheduleService.toggleSchedule(platform as 'instagram' | 'youtube', enabled)
+  mainWindow?.webContents.send('schedule:updated')
+})
+
+ipcMain.handle('schedule:delete', async (_event, scheduleId: string) => {
+  const scheduleService = getScheduleService()
+  scheduleService.deleteSchedule(scheduleId)
+  mainWindow?.webContents.send('schedule:updated')
+})
+
+ipcMain.handle('schedule:generateQueue', async (_event, daysAhead: number = 7) => {
+  const scheduleService = getScheduleService()
+  const result = scheduleService.generateQueueFromActiveSchedules(daysAhead)
+  mainWindow?.webContents.send('queue:updated')
+  return result
+})
+
+ipcMain.handle('schedule:getNextTime', async (_event, platform: string) => {
+  const scheduleService = getScheduleService()
+  return scheduleService.getNextScheduledTime(platform as 'instagram' | 'youtube')
 })
 
 // Activity log
