@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAppStore, View } from './stores/appStore'
+import { ToastContainer, useToast } from './components/Toast'
 
 interface QueueItem {
   id: string
@@ -26,6 +27,8 @@ function App() {
     stats,
   } = useAppStore()
 
+  const toast = useToast()
+
   useEffect(() => {
     // Get app version from Electron
     window.electronAPI?.getVersion().then(setAppVersion).catch(console.error)
@@ -45,13 +48,54 @@ function App() {
 
     // Listen for account changes
     window.electronAPI?.onAccountConnected(() => {
-      loadAccounts() // Reload accounts when one is connected
+      loadAccounts()
+      toast.success('Account connected successfully!')
     })
 
     window.electronAPI?.onAccountDisconnected(() => {
-      loadAccounts() // Reload accounts when one is disconnected
+      loadAccounts()
+      toast.info('Account disconnected')
+    })
+
+    // Listen for posting progress
+    window.electronAPI?.onPostingProgress((progress) => {
+      if (progress.status === 'posted') {
+        toast.success(`Posted ${progress.filename} to ${progress.platform}`)
+        showDesktopNotification('Post Successful', `Published to ${progress.platform}`)
+      } else if (progress.status === 'failed') {
+        toast.error(`Failed to post ${progress.filename}: ${progress.error}`)
+        showDesktopNotification('Post Failed', progress.error || 'Unknown error')
+      } else if (progress.status === 'processing') {
+        toast.info(`Posting ${progress.filename} to ${progress.platform}...`)
+      }
+    })
+
+    // Listen for scan completion
+    window.electronAPI?.onScanComplete((result) => {
+      if (result.discovered > 0) {
+        toast.success(`Content scan complete: ${result.discovered} new videos found`)
+        showDesktopNotification('Content Scan Complete', `${result.discovered} new videos discovered`)
+      }
+    })
+
+    // Listen for folder selection
+    window.electronAPI?.onFolderSelected((folder) => {
+      toast.success(`Folder "${folder.folderName}" added to content sources`)
     })
   }, [setAppVersion, setAccounts, setSchedulerPaused])
+
+  const showDesktopNotification = (title: string, body: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, icon: '/icon.png' })
+    }
+  }
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
 
   const navItems: { id: View; label: string; icon: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -119,15 +163,18 @@ function App() {
 
         {/* Content Area */}
         <div className="flex-1 p-6 overflow-auto">
-          {currentView === 'dashboard' && <DashboardView stats={stats} />}
-          {currentView === 'content' && <ContentView isConnected={isConnected} />}
-          {currentView === 'queue' && <QueueView />}
-          {currentView === 'schedule' && <ScheduleView />}
+          {currentView === 'dashboard' && <DashboardView />}
+          {currentView === 'content' && <ContentView isConnected={isConnected} toast={toast} />}
+          {currentView === 'queue' && <QueueView toast={toast} />}
+          {currentView === 'schedule' && <ScheduleView toast={toast} />}
           {currentView === 'settings' && (
-            <SettingsView accounts={accounts} isConnected={isConnected} />
+            <SettingsView accounts={accounts} isConnected={isConnected} toast={toast} />
           )}
         </div>
       </main>
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toast.toasts} onRemove={toast.removeToast} />
     </div>
   )
 }
@@ -365,7 +412,7 @@ function StatCard({
   )
 }
 
-function QueueView() {
+function QueueView({ toast }: { toast: ReturnType<typeof useToast> }) {
   const [selectedPlatform, setSelectedPlatform] = useState<'instagram' | 'youtube'>('instagram')
   const [queueItems, setQueueItems] = useState<QueueItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -398,16 +445,31 @@ function QueueView() {
   }
 
   const handleSkip = async (itemId: string) => {
-    await window.electronAPI?.skipQueueItem(itemId)
+    try {
+      await window.electronAPI?.skipQueueItem(itemId)
+      toast.info('Post skipped')
+    } catch (error) {
+      toast.error('Failed to skip post')
+    }
   }
 
   const handleRetry = async (itemId: string) => {
-    await window.electronAPI?.retryQueueItem(itemId)
+    try {
+      await window.electronAPI?.retryQueueItem(itemId)
+      toast.success('Post will be retried')
+    } catch (error) {
+      toast.error('Failed to retry post')
+    }
   }
 
   const handleDelete = async (itemId: string) => {
     if (confirm('Are you sure you want to remove this item from the queue?')) {
-      await window.electronAPI?.deleteQueueItem(itemId)
+      try {
+        await window.electronAPI?.deleteQueueItem(itemId)
+        toast.success('Post removed from queue')
+      } catch (error) {
+        toast.error('Failed to remove post')
+      }
     }
   }
 
@@ -556,7 +618,7 @@ function QueueItemRow({
   )
 }
 
-function ContentView({ isConnected }: { isConnected: (platform: string) => boolean }) {
+function ContentView({ isConnected, toast }: { isConnected: (platform: string) => boolean; toast: ReturnType<typeof useToast> }) {
   const {
     selectedFolders,
     setSelectedFolders,
@@ -655,28 +717,44 @@ function ContentView({ isConnected }: { isConnected: (platform: string) => boole
   }
 
   const selectFolder = async (folderId: string, folderName: string) => {
-    const result = await window.electronAPI?.selectFolder(folderId, folderName)
-    if (result?.success) {
+    try {
+      const result = await window.electronAPI?.selectFolder(folderId, folderName)
+      if (result?.error) {
+        toast.error(`Failed to select folder: ${result.error}`)
+      } else if (result?.success) {
+        // Refresh selected folders
+        const folders = await window.electronAPI?.getSelectedFolders()
+        if (folders && Array.isArray(folders)) {
+          setSelectedFolders(folders as typeof selectedFolders)
+        }
+      }
+    } catch (error) {
+      toast.error('Failed to select folder')
+    }
+  }
+
+  const unselectFolder = async (folderId: string) => {
+    try {
+      await window.electronAPI?.unselectFolder(folderId)
       // Refresh selected folders
       const folders = await window.electronAPI?.getSelectedFolders()
       if (folders && Array.isArray(folders)) {
         setSelectedFolders(folders as typeof selectedFolders)
       }
-    }
-  }
-
-  const unselectFolder = async (folderId: string) => {
-    await window.electronAPI?.unselectFolder(folderId)
-    // Refresh selected folders
-    const folders = await window.electronAPI?.getSelectedFolders()
-    if (folders && Array.isArray(folders)) {
-      setSelectedFolders(folders as typeof selectedFolders)
+      toast.info('Folder removed from content sources')
+    } catch (error) {
+      toast.error('Failed to remove folder')
     }
   }
 
   const handleScan = async () => {
-    setIsScanning(true)
-    await window.electronAPI?.scanContent()
+    try {
+      setIsScanning(true)
+      await window.electronAPI?.scanContent()
+    } catch (error) {
+      toast.error('Content scan failed')
+      setIsScanning(false)
+    }
   }
 
   const formatFileSize = (bytes: number) => {
@@ -897,7 +975,7 @@ function ContentView({ isConnected }: { isConnected: (platform: string) => boole
   )
 }
 
-function ScheduleView() {
+function ScheduleView({ toast }: { toast: ReturnType<typeof useToast> }) {
   const { accounts } = useAppStore()
   const [instagramSchedule, setInstagramSchedule] = useState<Schedule | null>(null)
   const [youtubeSchedule, setYoutubeSchedule] = useState<Schedule | null>(null)
@@ -931,6 +1009,7 @@ function ScheduleView() {
         account={getAccountForPlatform('instagram')}
         schedule={instagramSchedule}
         onScheduleChange={loadSchedules}
+        toast={toast}
       />
       <PlatformSchedule
         platform="youtube"
@@ -939,6 +1018,7 @@ function ScheduleView() {
         account={getAccountForPlatform('youtube')}
         schedule={youtubeSchedule}
         onScheduleChange={loadSchedules}
+        toast={toast}
       />
     </div>
   )
@@ -961,6 +1041,7 @@ function PlatformSchedule({
   account,
   schedule,
   onScheduleChange,
+  toast,
 }: {
   platform: 'instagram' | 'youtube'
   icon: string
@@ -968,6 +1049,7 @@ function PlatformSchedule({
   account?: { id: string; account_id: string; account_name: string }
   schedule: Schedule | null
   onScheduleChange: () => void
+  toast: ReturnType<typeof useToast>
 }) {
   const [selectedDays, setSelectedDays] = useState<number[]>(schedule?.days_of_week || [])
   const [times, setTimes] = useState<string[]>(schedule?.times || [])
@@ -1006,23 +1088,29 @@ function PlatformSchedule({
     if (!account) return
 
     setSaving(true)
-    const scheduleData: Schedule = {
-      id: schedule?.id,
-      platform,
-      account_id: account.account_id,
-      days_of_week: selectedDays,
-      times,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      enabled,
-    }
+    try {
+      const scheduleData: Schedule = {
+        id: schedule?.id,
+        platform,
+        account_id: account.account_id,
+        days_of_week: selectedDays,
+        times,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        enabled,
+      }
 
-    const result = await window.electronAPI?.saveSchedule(scheduleData)
-    if (result?.error) {
-      alert(`Error: ${result.error}`)
-    } else {
-      onScheduleChange()
+      const result = await window.electronAPI?.saveSchedule(scheduleData)
+      if (result?.error) {
+        toast.error(`Failed to save schedule: ${result.error}`)
+      } else {
+        toast.success(`${label} schedule saved successfully!`)
+        onScheduleChange()
+      }
+    } catch (error) {
+      toast.error('Failed to save schedule')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const handleToggle = async () => {
@@ -1141,12 +1229,34 @@ function PlatformSchedule({
 function SettingsView({
   accounts,
   isConnected,
+  toast,
 }: {
   accounts: { id: string; platform: string; account_name: string }[]
   isConnected: (platform: string) => boolean
+  toast: ReturnType<typeof useToast>
 }) {
   const [connecting, setConnecting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [settings, setSettings] = useState({
+    notifySuccess: true,
+    notifyFailed: true,
+    minimizeToTray: true,
+    startOnBoot: false,
+  })
+
+  useEffect(() => {
+    // Load settings
+    window.electronAPI?.getSettings().then((loadedSettings: any) => {
+      if (loadedSettings) {
+        setSettings({
+          notifySuccess: loadedSettings.notifySuccess !== false,
+          notifyFailed: loadedSettings.notifyFailed !== false,
+          minimizeToTray: loadedSettings.minimizeToTray !== false,
+          startOnBoot: loadedSettings.startOnBoot === true,
+        })
+      }
+    })
+  }, [])
 
   const handleConnect = async (platform: string) => {
     setConnecting(platform)
@@ -1165,6 +1275,17 @@ function SettingsView({
 
   const handleDisconnect = async (accountId: string) => {
     await window.electronAPI?.disconnectAccount(accountId)
+  }
+
+  const handleSettingChange = async (key: keyof typeof settings, value: boolean) => {
+    const newSettings = { ...settings, [key]: value }
+    setSettings(newSettings)
+    try {
+      await window.electronAPI?.saveSettings(newSettings)
+      toast.success('Settings saved')
+    } catch (error) {
+      toast.error('Failed to save settings')
+    }
   }
 
   return (
@@ -1219,11 +1340,21 @@ function SettingsView({
         <div className="space-y-3">
           <label className="flex items-center justify-between cursor-pointer">
             <span>Notify on successful post</span>
-            <input type="checkbox" defaultChecked className="w-4 h-4 accent-blue-500" />
+            <input
+              type="checkbox"
+              checked={settings.notifySuccess}
+              onChange={(e) => handleSettingChange('notifySuccess', e.target.checked)}
+              className="w-4 h-4 accent-blue-500"
+            />
           </label>
           <label className="flex items-center justify-between cursor-pointer">
             <span>Notify on failed post</span>
-            <input type="checkbox" defaultChecked className="w-4 h-4 accent-blue-500" />
+            <input
+              type="checkbox"
+              checked={settings.notifyFailed}
+              onChange={(e) => handleSettingChange('notifyFailed', e.target.checked)}
+              className="w-4 h-4 accent-blue-500"
+            />
           </label>
         </div>
       </div>
@@ -1233,11 +1364,21 @@ function SettingsView({
         <div className="space-y-3">
           <label className="flex items-center justify-between cursor-pointer">
             <span>Minimize to system tray</span>
-            <input type="checkbox" defaultChecked className="w-4 h-4 accent-blue-500" />
+            <input
+              type="checkbox"
+              checked={settings.minimizeToTray}
+              onChange={(e) => handleSettingChange('minimizeToTray', e.target.checked)}
+              className="w-4 h-4 accent-blue-500"
+            />
           </label>
           <label className="flex items-center justify-between cursor-pointer">
             <span>Start on system boot</span>
-            <input type="checkbox" className="w-4 h-4 accent-blue-500" />
+            <input
+              type="checkbox"
+              checked={settings.startOnBoot}
+              onChange={(e) => handleSettingChange('startOnBoot', e.target.checked)}
+              className="w-4 h-4 accent-blue-500"
+            />
           </label>
         </div>
       </div>
