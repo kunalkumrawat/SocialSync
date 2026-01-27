@@ -8,6 +8,7 @@ import { getContentScheduler } from './services/scheduler'
 import { getQueueService } from './services/queue'
 import { getScheduleService } from './services/schedule'
 import { getPostingService } from './services/posting'
+import { getInstagramPublisher, getYouTubePublisher } from './services/publishing'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only applies to Windows builds with Squirrel installer
@@ -153,6 +154,14 @@ app.whenReady().then(async () => {
   if (mainWindow) {
     postingService.setMainWindow(mainWindow)
   }
+
+  // Register publishers
+  const instagramPublisher = getInstagramPublisher()
+  const youtubePublisher = getYouTubePublisher()
+  postingService.registerPublisher('instagram', instagramPublisher)
+  postingService.registerPublisher('youtube', youtubePublisher)
+  console.log('[Main] Publishers registered')
+
   postingService.start()
   console.log('[Main] Posting service started')
 
