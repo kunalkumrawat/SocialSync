@@ -43,6 +43,7 @@ function App() {
 
   const navItems: { id: View; label: string; icon: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'content', label: 'Content', icon: '📁' },
     { id: 'queue', label: 'Queue', icon: '📋' },
     { id: 'schedule', label: 'Schedule', icon: '🕐' },
     { id: 'settings', label: 'Settings', icon: '⚙️' },
@@ -107,6 +108,7 @@ function App() {
         {/* Content Area */}
         <div className="flex-1 p-6 overflow-auto">
           {currentView === 'dashboard' && <DashboardView stats={stats} />}
+          {currentView === 'content' && <ContentView isConnected={isConnected} />}
           {currentView === 'queue' && <QueueView />}
           {currentView === 'schedule' && <ScheduleView />}
           {currentView === 'settings' && (
@@ -252,6 +254,347 @@ function QueueItemRow({ item }: { item: { id: string; filename?: string; schedul
           {item.status}
         </span>
         <button className="p-1 hover:bg-gray-600 rounded">⏭️</button>
+      </div>
+    </div>
+  )
+}
+
+function ContentView({ isConnected }: { isConnected: (platform: string) => boolean }) {
+  const {
+    selectedFolders,
+    setSelectedFolders,
+    contentItems,
+    setContentItems,
+    isScanning,
+    setIsScanning,
+  } = useAppStore()
+
+  const [browsing, setBrowsing] = useState(false)
+  const [currentPath, setCurrentPath] = useState<Array<{ id: string; name: string }>>([])
+  const [folders, setFolders] = useState<Array<{ id: string; name: string }>>([])
+  const [loadingFolders, setLoadingFolders] = useState(false)
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({})
+
+  // Load selected folders and content on mount
+  useEffect(() => {
+    const loadData = async () => {
+      const folders = await window.electronAPI?.getSelectedFolders()
+      if (folders && Array.isArray(folders)) {
+        setSelectedFolders(folders as typeof selectedFolders)
+      }
+
+      const content = await window.electronAPI?.getContent({ limit: 100 })
+      if (content && Array.isArray(content)) {
+        setContentItems(content as typeof contentItems)
+      }
+    }
+    loadData()
+
+    // Listen for scan completion
+    window.electronAPI?.onScanComplete(() => {
+      setIsScanning(false)
+      // Reload content
+      window.electronAPI?.getContent({ limit: 100 }).then((content) => {
+        if (content && Array.isArray(content)) {
+          setContentItems(content as typeof contentItems)
+        }
+      })
+    })
+  }, [setSelectedFolders, setContentItems, setIsScanning])
+
+  // Fetch thumbnails for content items
+  useEffect(() => {
+    const fetchThumbnails = async () => {
+      const newThumbnails: Record<string, string> = {}
+
+      for (const item of contentItems.slice(0, 20)) { // Limit to first 20 to avoid rate limits
+        if (!thumbnails[item.drive_file_id]) {
+          const thumb = await window.electronAPI?.getThumbnail(item.drive_file_id)
+          if (thumb) {
+            newThumbnails[item.drive_file_id] = thumb
+          }
+        }
+      }
+
+      if (Object.keys(newThumbnails).length > 0) {
+        setThumbnails(prev => ({ ...prev, ...newThumbnails }))
+      }
+    }
+
+    if (contentItems.length > 0) {
+      fetchThumbnails()
+    }
+  }, [contentItems, thumbnails])
+
+  const handleBrowseFolders = async (parentId?: string) => {
+    if (!isConnected('google')) return
+
+    setLoadingFolders(true)
+    const result = await window.electronAPI?.listDriveFolders(parentId)
+
+    if (result && !('error' in result)) {
+      setFolders(result as Array<{ id: string; name: string }>)
+    }
+    setLoadingFolders(false)
+  }
+
+  const openBrowser = () => {
+    setBrowsing(true)
+    setCurrentPath([])
+    handleBrowseFolders()
+  }
+
+  const navigateToFolder = (folderId: string, folderName: string) => {
+    setCurrentPath([...currentPath, { id: folderId, name: folderName }])
+    handleBrowseFolders(folderId)
+  }
+
+  const navigateBack = () => {
+    const newPath = [...currentPath]
+    newPath.pop()
+    setCurrentPath(newPath)
+    const parentId = newPath.length > 0 ? newPath[newPath.length - 1].id : undefined
+    handleBrowseFolders(parentId)
+  }
+
+  const selectFolder = async (folderId: string, folderName: string) => {
+    const result = await window.electronAPI?.selectFolder(folderId, folderName)
+    if (result?.success) {
+      // Refresh selected folders
+      const folders = await window.electronAPI?.getSelectedFolders()
+      if (folders && Array.isArray(folders)) {
+        setSelectedFolders(folders as typeof selectedFolders)
+      }
+    }
+  }
+
+  const unselectFolder = async (folderId: string) => {
+    await window.electronAPI?.unselectFolder(folderId)
+    // Refresh selected folders
+    const folders = await window.electronAPI?.getSelectedFolders()
+    if (folders && Array.isArray(folders)) {
+      setSelectedFolders(folders as typeof selectedFolders)
+    }
+  }
+
+  const handleScan = async () => {
+    setIsScanning(true)
+    await window.electronAPI?.scanContent()
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  if (!isConnected('google')) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center">
+        <span className="text-6xl mb-4">📁</span>
+        <h3 className="text-xl font-semibold mb-2">Connect Google Drive</h3>
+        <p className="text-gray-400 mb-4">
+          Go to Settings and connect your Google Drive to browse and select content folders.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Selected Folders */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Selected Folders</h3>
+          <div className="flex gap-2">
+            <button
+              onClick={openBrowser}
+              className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+            >
+              Browse Folders
+            </button>
+            <button
+              onClick={handleScan}
+              disabled={isScanning || selectedFolders.length === 0}
+              className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isScanning ? 'Scanning...' : 'Scan for Content'}
+            </button>
+          </div>
+        </div>
+
+        {selectedFolders.length === 0 ? (
+          <p className="text-gray-400">No folders selected. Click "Browse Folders" to add content sources.</p>
+        ) : (
+          <div className="space-y-2">
+            {selectedFolders.map((folder) => (
+              <div
+                key={folder.folderId}
+                className="flex items-center justify-between p-3 bg-gray-700 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">📂</span>
+                  <span>{folder.folderName}</span>
+                </div>
+                <button
+                  onClick={() => unselectFolder(folder.folderId)}
+                  className="p-1 text-red-400 hover:text-red-300 hover:bg-gray-600 rounded"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Folder Browser Modal */}
+      {browsing && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b border-gray-700">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Browse Google Drive</h3>
+                <button
+                  onClick={() => setBrowsing(false)}
+                  className="p-1 hover:bg-gray-700 rounded"
+                >
+                  ✕
+                </button>
+              </div>
+              {currentPath.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 text-sm text-gray-400">
+                  <button onClick={() => { setCurrentPath([]); handleBrowseFolders(); }} className="hover:text-white">
+                    Root
+                  </button>
+                  {currentPath.map((p, i) => (
+                    <span key={p.id} className="flex items-center gap-2">
+                      <span>/</span>
+                      <button
+                        onClick={() => {
+                          const newPath = currentPath.slice(0, i + 1)
+                          setCurrentPath(newPath)
+                          handleBrowseFolders(p.id)
+                        }}
+                        className="hover:text-white"
+                      >
+                        {p.name}
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-auto p-4">
+              {currentPath.length > 0 && (
+                <button
+                  onClick={navigateBack}
+                  className="flex items-center gap-2 w-full p-3 bg-gray-700 rounded-lg mb-2 hover:bg-gray-600"
+                >
+                  <span>⬆️</span>
+                  <span>Go Back</span>
+                </button>
+              )}
+
+              {loadingFolders ? (
+                <div className="text-center py-8 text-gray-400">Loading folders...</div>
+              ) : folders.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">No folders found</div>
+              ) : (
+                <div className="space-y-2">
+                  {folders.map((folder) => {
+                    const isSelected = selectedFolders.some((f) => f.folderId === folder.id)
+                    return (
+                      <div
+                        key={folder.id}
+                        className="flex items-center justify-between p-3 bg-gray-700 rounded-lg"
+                      >
+                        <button
+                          onClick={() => navigateToFolder(folder.id, folder.name)}
+                          className="flex items-center gap-3 flex-1 text-left hover:text-blue-400"
+                        >
+                          <span className="text-xl">📁</span>
+                          <span>{folder.name}</span>
+                        </button>
+                        <button
+                          onClick={() => selectFolder(folder.id, folder.name)}
+                          disabled={isSelected}
+                          className={`px-3 py-1 rounded text-sm ${
+                            isSelected
+                              ? 'bg-green-600 cursor-not-allowed'
+                              : 'bg-blue-600 hover:bg-blue-700'
+                          }`}
+                        >
+                          {isSelected ? 'Selected' : 'Select'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Content Library */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold mb-4">
+          Content Library ({contentItems.length} items)
+        </h3>
+
+        {contentItems.length === 0 ? (
+          <p className="text-gray-400">
+            No content discovered yet. Select folders and click "Scan for Content".
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[500px] overflow-auto">
+            {contentItems.map((item) => (
+              <div
+                key={item.id}
+                className="bg-gray-700 rounded-lg overflow-hidden"
+              >
+                {/* Thumbnail */}
+                <div className="aspect-[9/16] bg-gray-800 relative">
+                  {thumbnails[item.drive_file_id] ? (
+                    <img
+                      src={thumbnails[item.drive_file_id]}
+                      alt={item.filename}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-4xl">🎬</span>
+                    </div>
+                  )}
+                  <span
+                    className={`absolute top-2 right-2 px-2 py-1 text-xs rounded ${
+                      item.status === 'pending'
+                        ? 'bg-yellow-600'
+                        : item.status === 'queued'
+                        ? 'bg-blue-600'
+                        : item.status === 'posted'
+                        ? 'bg-green-600'
+                        : 'bg-red-600'
+                    }`}
+                  >
+                    {item.status}
+                  </span>
+                </div>
+                {/* Info */}
+                <div className="p-3">
+                  <p className="font-medium text-sm truncate" title={item.filename}>
+                    {item.filename}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {formatFileSize(item.size_bytes)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

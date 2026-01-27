@@ -9,10 +9,15 @@ export interface ElectronAPI {
   getAccounts: () => Promise<unknown[]>
   connectAccount: (platform: string) => Promise<unknown>
   disconnectAccount: (accountId: string) => Promise<void>
-  listDriveFolders: (parentId?: string) => Promise<unknown[]>
-  selectFolder: (folderId: string) => Promise<void>
+  listDriveFolders: (parentId?: string) => Promise<unknown[] | { error: string }>
+  selectFolder: (folderId: string, folderName: string) => Promise<{ success?: boolean; error?: string }>
+  unselectFolder: (folderId: string) => Promise<{ success?: boolean; error?: string }>
   getSelectedFolders: () => Promise<unknown[]>
-  scanContent: () => Promise<void>
+  scanContent: () => Promise<{ discovered?: number; skipped?: number; error?: string }>
+  getContent: (options?: { status?: string; limit?: number }) => Promise<unknown[]>
+  getThumbnail: (fileId: string) => Promise<string | null>
+  onFolderSelected: (callback: (folder: { folderId: string; folderName: string }) => void) => void
+  onScanComplete: (callback: (result: { discovered: number; skipped: number }) => void) => void
   getQueue: (platform: string) => Promise<unknown[]>
   skipQueueItem: (itemId: string) => Promise<void>
   retryQueueItem: (itemId: string) => Promise<void>

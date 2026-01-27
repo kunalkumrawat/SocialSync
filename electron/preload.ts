@@ -27,11 +27,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   connectAccount: (platform: string) => ipcRenderer.invoke('accounts:connect', platform),
   disconnectAccount: (accountId: string) => ipcRenderer.invoke('accounts:disconnect', accountId),
 
-  // Drive (to be implemented)
+  // Drive
   listDriveFolders: (parentId?: string) => ipcRenderer.invoke('drive:listFolders', parentId),
-  selectFolder: (folderId: string) => ipcRenderer.invoke('drive:selectFolder', folderId),
+  selectFolder: (folderId: string, folderName: string) =>
+    ipcRenderer.invoke('drive:selectFolder', folderId, folderName),
+  unselectFolder: (folderId: string) => ipcRenderer.invoke('drive:unselectFolder', folderId),
   getSelectedFolders: () => ipcRenderer.invoke('drive:getSelectedFolders'),
   scanContent: () => ipcRenderer.invoke('drive:scanContent'),
+  getContent: (options?: { status?: string; limit?: number }) =>
+    ipcRenderer.invoke('drive:getContent', options),
+  getThumbnail: (fileId: string) => ipcRenderer.invoke('drive:getThumbnail', fileId),
+  onFolderSelected: (callback: (folder: { folderId: string; folderName: string }) => void) => {
+    ipcRenderer.on('drive:folderSelected', (_event, folder) => callback(folder))
+  },
+  onScanComplete: (callback: (result: { discovered: number; skipped: number }) => void) => {
+    ipcRenderer.on('drive:scanComplete', (_event, result) => callback(result))
+  },
 
   // Queue (to be implemented)
   getQueue: (platform: string) => ipcRenderer.invoke('queue:get', platform),

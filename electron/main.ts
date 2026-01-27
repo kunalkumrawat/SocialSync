@@ -3,6 +3,8 @@ import path from 'path'
 import { getDatabase } from './services/database/DatabaseService'
 import { getSettings } from './services/settings/SettingsService'
 import { getGoogleAuth, getYouTubeAuth, getInstagramAuth } from './services/auth'
+import { getDriveService } from './services/drive'
+import { getContentScheduler } from './services/scheduler'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only applies to Windows builds with Squirrel installer
@@ -135,6 +137,14 @@ app.whenReady().then(async () => {
   createWindow()
   createTray()
 
+  // Start content scheduler for hourly scans
+  const contentScheduler = getContentScheduler()
+  if (mainWindow) {
+    contentScheduler.setMainWindow(mainWindow)
+  }
+  contentScheduler.start()
+  console.log('[Main] Content scheduler started')
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
@@ -152,6 +162,10 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true
+
+  // Stop content scheduler
+  const contentScheduler = getContentScheduler()
+  contentScheduler.stop()
 
   // Close database cleanly
   const db = getDatabase()
@@ -257,23 +271,126 @@ ipcMain.handle('accounts:disconnect', async (_event, accountId: string) => {
   mainWindow?.webContents.send('accounts:disconnected', accountId)
 })
 
-// Drive (placeholder - to be implemented in Epic 3)
-ipcMain.handle('drive:listFolders', async (_event, _parentId?: string) => {
-  // TODO: Implement in Epic 3
-  return []
+// Drive
+ipcMain.handle('drive:listFolders', async (_event, parentId?: string) => {
+  try {
+    const driveService = getDriveService()
+
+    // Get the Google account
+    const db = getDatabase()
+    const googleAccount = db.get<{ account_id: string }>(
+      "SELECT account_id FROM accounts WHERE platform = 'google' LIMIT 1"
+    )
+
+    if (!googleAccount) {
+      return { error: 'Google Drive not connected' }
+    }
+
+    driveService.setAccount(googleAccount.account_id)
+    const folders = await driveService.listFolders(parentId)
+    return folders
+  } catch (error) {
+    console.error('[IPC] drive:listFolders error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to list folders'
+    return { error: message }
+  }
 })
 
-ipcMain.handle('drive:selectFolder', async (_event, _folderId: string) => {
-  // TODO: Implement in Epic 3
+ipcMain.handle('drive:selectFolder', async (_event, folderId: string, folderName: string) => {
+  try {
+    const driveService = getDriveService()
+
+    const db = getDatabase()
+    const googleAccount = db.get<{ account_id: string }>(
+      "SELECT account_id FROM accounts WHERE platform = 'google' LIMIT 1"
+    )
+
+    if (!googleAccount) {
+      return { error: 'Google Drive not connected' }
+    }
+
+    driveService.setAccount(googleAccount.account_id)
+    await driveService.selectFolder(folderId, folderName)
+
+    // Notify renderer
+    mainWindow?.webContents.send('drive:folderSelected', { folderId, folderName })
+
+    return { success: true }
+  } catch (error) {
+    console.error('[IPC] drive:selectFolder error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to select folder'
+    return { error: message }
+  }
+})
+
+ipcMain.handle('drive:unselectFolder', async (_event, folderId: string) => {
+  try {
+    const driveService = getDriveService()
+    await driveService.unselectFolder(folderId)
+    return { success: true }
+  } catch (error) {
+    console.error('[IPC] drive:unselectFolder error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to unselect folder'
+    return { error: message }
+  }
 })
 
 ipcMain.handle('drive:getSelectedFolders', async () => {
-  const db = getDatabase()
-  return db.all('SELECT * FROM drive_folders ORDER BY created_at DESC')
+  const driveService = getDriveService()
+  return driveService.getSelectedFolders()
 })
 
 ipcMain.handle('drive:scanContent', async () => {
-  // TODO: Implement in Epic 3
+  try {
+    const driveService = getDriveService()
+
+    const db = getDatabase()
+    const googleAccount = db.get<{ account_id: string }>(
+      "SELECT account_id FROM accounts WHERE platform = 'google' LIMIT 1"
+    )
+
+    if (!googleAccount) {
+      return { error: 'Google Drive not connected' }
+    }
+
+    driveService.setAccount(googleAccount.account_id)
+    const result = await driveService.scanForContent()
+
+    // Notify renderer of new content
+    mainWindow?.webContents.send('drive:scanComplete', result)
+
+    return result
+  } catch (error) {
+    console.error('[IPC] drive:scanContent error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to scan content'
+    return { error: message }
+  }
+})
+
+ipcMain.handle('drive:getContent', async (_event, options?: { status?: string; limit?: number }) => {
+  const driveService = getDriveService()
+  return driveService.getContentItems(options)
+})
+
+ipcMain.handle('drive:getThumbnail', async (_event, fileId: string) => {
+  try {
+    const driveService = getDriveService()
+
+    const db = getDatabase()
+    const googleAccount = db.get<{ account_id: string }>(
+      "SELECT account_id FROM accounts WHERE platform = 'google' LIMIT 1"
+    )
+
+    if (!googleAccount) {
+      return null
+    }
+
+    driveService.setAccount(googleAccount.account_id)
+    return await driveService.getThumbnail(fileId)
+  } catch (error) {
+    console.error('[IPC] drive:getThumbnail error:', error)
+    return null
+  }
 })
 
 // Queue (placeholder - to be implemented in Epic 4)

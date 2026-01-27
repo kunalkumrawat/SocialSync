@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type View = 'dashboard' | 'queue' | 'schedule' | 'settings'
+export type View = 'dashboard' | 'content' | 'queue' | 'schedule' | 'settings'
 
 export interface Account {
   id: string
@@ -17,6 +17,25 @@ export interface QueueItem {
   scheduled_for: string
   status: 'pending' | 'processing' | 'posted' | 'failed' | 'skipped'
   filename?: string
+}
+
+export interface DriveFolder {
+  id: string
+  folderId: string
+  folderName: string
+}
+
+export interface ContentItem {
+  id: string
+  drive_file_id: string
+  folder_id: string
+  filename: string
+  mime_type: string
+  size_bytes: number
+  duration_seconds?: number
+  created_at: string
+  discovered_at: string
+  status: 'pending' | 'queued' | 'posted' | 'failed' | 'skipped'
 }
 
 export interface AppState {
@@ -49,6 +68,14 @@ export interface AppState {
     failed: number
   }
   setStats: (stats: AppState['stats']) => void
+
+  // Drive/Content
+  selectedFolders: DriveFolder[]
+  setSelectedFolders: (folders: DriveFolder[]) => void
+  contentItems: ContentItem[]
+  setContentItems: (items: ContentItem[]) => void
+  isScanning: boolean
+  setIsScanning: (scanning: boolean) => void
 
   // Loading states
   isLoading: boolean
@@ -85,6 +112,14 @@ export const useAppStore = create<AppState>((set) => ({
     failed: 0,
   },
   setStats: (stats) => set({ stats }),
+
+  // Drive/Content
+  selectedFolders: [],
+  setSelectedFolders: (selectedFolders) => set({ selectedFolders }),
+  contentItems: [],
+  setContentItems: (contentItems) => set({ contentItems }),
+  isScanning: false,
+  setIsScanning: (isScanning) => set({ isScanning }),
 
   // Loading
   isLoading: false,
