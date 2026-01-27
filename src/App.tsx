@@ -136,34 +136,199 @@ function App() {
 // View Components
 // ============================================
 
-function DashboardView({ stats }: { stats: { pendingPosts: number; postedToday: number; failed: number } }) {
+function DashboardView() {
+  const { accounts } = useAppStore()
+  const [queueStats, setQueueStats] = useState({ pending: 0, posted: 0, failed: 0 })
+  const [contentCount, setContentCount] = useState(0)
+  const [instagramQueue, setInstagramQueue] = useState<QueueItem[]>([])
+  const [youtubeQueue, setYoutubeQueue] = useState<QueueItem[]>([])
+  const [recentActivity, setRecentActivity] = useState<Activity[]>([])
+  const [postingStatus, setPostingStatus] = useState({ isPaused: false, dueCount: 0 })
+
+  const loadDashboard = async () => {
+    // Load queue stats
+    const stats = await window.electronAPI?.getQueueStats()
+    if (stats) {
+      setQueueStats(stats)
+    }
+
+    // Load content count
+    const content = await window.electronAPI?.getContent({ limit: 1000 })
+    if (content && Array.isArray(content)) {
+      setContentCount(content.length)
+    }
+
+    // Load upcoming posts for each platform
+    const igQueue = await window.electronAPI?.getQueue('instagram')
+    const ytQueue = await window.electronAPI?.getQueue('youtube')
+    if (igQueue && Array.isArray(igQueue)) setInstagramQueue(igQueue.slice(0, 3) as QueueItem[])
+    if (ytQueue && Array.isArray(ytQueue)) setYoutubeQueue(ytQueue.slice(0, 3) as QueueItem[])
+
+    // Load recent activity
+    const activity = await window.electronAPI?.getActivityLog(10)
+    if (activity && Array.isArray(activity)) {
+      setRecentActivity(activity as Activity[])
+    }
+
+    // Load posting status
+    const status = await window.electronAPI?.getPostingStatus()
+    if (status) {
+      setPostingStatus(status)
+    }
+  }
+
+  useEffect(() => {
+    loadDashboard()
+
+    // Refresh every 30 seconds
+    const interval = setInterval(loadDashboard, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const isConnected = (platform: string) => accounts.some((a) => a.platform === platform)
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard title="Pending Posts" value={stats.pendingPosts.toString()} icon="📤" />
-        <StatCard title="Posted Today" value={stats.postedToday.toString()} icon="✅" />
-        <StatCard title="Failed" value={stats.failed.toString()} icon="❌" color={stats.failed > 0 ? 'red' : undefined} />
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          title="Content Library"
+          value={contentCount.toString()}
+          icon="📁"
+        />
+        <StatCard
+          title="Pending Posts"
+          value={queueStats.pending.toString()}
+          icon="📤"
+          color={postingStatus.dueCount > 0 ? 'yellow' : undefined}
+        />
+        <StatCard
+          title="Posted"
+          value={queueStats.posted.toString()}
+          icon="✅"
+          color="green"
+        />
+        <StatCard
+          title="Failed"
+          value={queueStats.failed.toString()}
+          icon="❌"
+          color={queueStats.failed > 0 ? 'red' : undefined}
+        />
       </div>
 
+      {/* Posting Status */}
+      {postingStatus.isPaused && (
+        <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4">
+          <p className="text-yellow-400">
+            ⚠️ Automated posting is paused. Posts will not be published automatically.
+          </p>
+        </div>
+      )}
+
+      {/* Upcoming Posts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <span>📸</span> Instagram
-          </h3>
-          <p className="text-gray-400">Connect Instagram to see upcoming posts.</p>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <span>🎬</span> YouTube
-          </h3>
-          <p className="text-gray-400">Connect YouTube to see upcoming posts.</p>
-        </div>
+        <PlatformDashboard
+          platform="instagram"
+          icon="📸"
+          label="Instagram"
+          isConnected={isConnected('instagram')}
+          upcomingPosts={instagramQueue}
+        />
+        <PlatformDashboard
+          platform="youtube"
+          icon="🎬"
+          label="YouTube"
+          isConnected={isConnected('youtube')}
+          upcomingPosts={youtubeQueue}
+        />
       </div>
 
+      {/* Recent Activity */}
       <div className="bg-gray-800 rounded-lg p-6">
         <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
-        <p className="text-gray-400">No recent activity. Start posting to see your history here.</p>
+        {recentActivity.length === 0 ? (
+          <p className="text-gray-400">No recent activity.</p>
+        ) : (
+          <div className="space-y-2">
+            {recentActivity.map((activity) => (
+              <ActivityItem key={activity.id} activity={activity} />
+            ))}
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+interface Activity {
+  id: string
+  event_type: string
+  message: string
+  platform?: string
+  created_at: string
+}
+
+function ActivityItem({ activity }: { activity: Activity }) {
+  const getIcon = (eventType: string) => {
+    if (eventType.includes('success')) return '✅'
+    if (eventType.includes('failed')) return '❌'
+    if (eventType.includes('scan')) return '🔍'
+    return '📝'
+  }
+
+  const timeAgo = (date: string) => {
+    const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000)
+    if (seconds < 60) return 'just now'
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
+    return `${Math.floor(seconds / 86400)}d ago`
+  }
+
+  return (
+    <div className="flex items-start gap-3 p-3 bg-gray-700 rounded-lg">
+      <span className="text-xl">{getIcon(activity.event_type)}</span>
+      <div className="flex-1">
+        <p className="text-sm">{activity.message}</p>
+        <p className="text-xs text-gray-400 mt-1">{timeAgo(activity.created_at)}</p>
+      </div>
+    </div>
+  )
+}
+
+function PlatformDashboard({
+  platform,
+  icon,
+  label,
+  isConnected,
+  upcomingPosts,
+}: {
+  platform: string
+  icon: string
+  label: string
+  isConnected: boolean
+  upcomingPosts: QueueItem[]
+}) {
+  return (
+    <div className="bg-gray-800 rounded-lg p-6">
+      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+        <span>{icon}</span> {label}
+      </h3>
+      {!isConnected ? (
+        <p className="text-gray-400">Connect {label} to see upcoming posts.</p>
+      ) : upcomingPosts.length === 0 ? (
+        <p className="text-gray-400">No upcoming posts scheduled.</p>
+      ) : (
+        <div className="space-y-2">
+          {upcomingPosts.map((post) => (
+            <div key={post.id} className="p-2 bg-gray-700 rounded text-sm">
+              <p className="font-medium truncate">{post.filename}</p>
+              <p className="text-xs text-gray-400">
+                {new Date(post.scheduled_for).toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
