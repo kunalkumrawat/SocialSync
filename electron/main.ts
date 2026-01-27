@@ -7,6 +7,7 @@ import { getDriveService } from './services/drive'
 import { getContentScheduler } from './services/scheduler'
 import { getQueueService } from './services/queue'
 import { getScheduleService } from './services/schedule'
+import { getPostingService } from './services/posting'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only applies to Windows builds with Squirrel installer
@@ -147,6 +148,14 @@ app.whenReady().then(async () => {
   contentScheduler.start()
   console.log('[Main] Content scheduler started')
 
+  // Start posting service for automated posting
+  const postingService = getPostingService()
+  if (mainWindow) {
+    postingService.setMainWindow(mainWindow)
+  }
+  postingService.start()
+  console.log('[Main] Posting service started')
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
@@ -168,6 +177,10 @@ app.on('before-quit', () => {
   // Stop content scheduler
   const contentScheduler = getContentScheduler()
   contentScheduler.stop()
+
+  // Stop posting service
+  const postingService = getPostingService()
+  postingService.stop()
 
   // Close database cleanly
   const db = getDatabase()
@@ -497,6 +510,27 @@ ipcMain.handle('schedule:getNextTime', async (_event, platform: string) => {
 ipcMain.handle('activity:get', async (_event, limit = 50) => {
   const db = getDatabase()
   return db.all('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ?', [limit])
+})
+
+// Posting
+ipcMain.handle('posting:pause', async () => {
+  const postingService = getPostingService()
+  postingService.pause()
+})
+
+ipcMain.handle('posting:resume', async () => {
+  const postingService = getPostingService()
+  postingService.resume()
+})
+
+ipcMain.handle('posting:getStatus', async () => {
+  const postingService = getPostingService()
+  return postingService.getStats()
+})
+
+ipcMain.handle('posting:postNow', async (_event, queueId: string) => {
+  const postingService = getPostingService()
+  return await postingService.postNow(queueId)
 })
 
 // Helper to log activity

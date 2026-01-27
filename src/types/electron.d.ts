@@ -42,6 +42,23 @@ export interface ElectronAPI {
   getNextScheduledTime: (platform: string) => Promise<Date | null>
   onScheduleUpdated: (callback: () => void) => void
   getActivityLog: (limit?: number) => Promise<unknown[]>
+  pausePosting: () => Promise<void>
+  resumePosting: () => Promise<void>
+  getPostingStatus: () => Promise<{
+    isProcessing: boolean
+    isPaused: boolean
+    dueCount: number
+  }>
+  postNow: (queueId: string) => Promise<{ success: boolean; error?: string }>
+  onPostingProgress: (
+    callback: (progress: {
+      platform: string
+      status: string
+      filename: string
+      error?: string
+    }) => void
+  ) => void
+  onPostingPaused: (callback: (paused: boolean) => void) => void
 }
 
 declare global {

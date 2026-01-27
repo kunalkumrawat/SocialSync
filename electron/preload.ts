@@ -73,8 +73,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('schedule:updated', () => callback())
   },
 
-  // Activity (to be implemented)
+  // Activity
   getActivityLog: (limit?: number) => ipcRenderer.invoke('activity:get', limit),
+
+  // Posting
+  pausePosting: () => ipcRenderer.invoke('posting:pause'),
+  resumePosting: () => ipcRenderer.invoke('posting:resume'),
+  getPostingStatus: () => ipcRenderer.invoke('posting:getStatus'),
+  postNow: (queueId: string) => ipcRenderer.invoke('posting:postNow', queueId),
+  onPostingProgress: (
+    callback: (progress: {
+      platform: string
+      status: string
+      filename: string
+      error?: string
+    }) => void
+  ) => {
+    ipcRenderer.on('posting:progress', (_event, progress) => callback(progress))
+  },
+  onPostingPaused: (callback: (paused: boolean) => void) => {
+    ipcRenderer.on('posting:paused', (_event, paused) => callback(paused))
+  },
 })
 
 // Type definitions for renderer process
