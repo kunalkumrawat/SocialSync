@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type View = 'dashboard' | 'content' | 'queue' | 'schedule' | 'settings'
+export type View = 'dashboard' | 'content' | 'queue' | 'schedule' | 'posted' | 'settings'
 
 export interface Account {
   id: string

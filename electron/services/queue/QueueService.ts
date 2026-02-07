@@ -98,19 +98,20 @@ export class QueueService {
   updateQueueStatus(
     queueId: string,
     status: 'pending' | 'processing' | 'posted' | 'failed' | 'skipped',
-    error?: string
+    errorOrPostId?: string
   ): void {
     const db = getDatabase()
 
     if (status === 'posted') {
+      // errorOrPostId is the platform post ID when status is 'posted'
       db.run(
-        `UPDATE queue SET status = ?, posted_at = ?, last_error = NULL WHERE id = ?`,
-        [status, new Date().toISOString(), queueId]
+        `UPDATE queue SET status = ?, posted_at = ?, platform_post_id = ?, last_error = NULL WHERE id = ?`,
+        [status, new Date().toISOString(), errorOrPostId || null, queueId]
       )
     } else if (status === 'failed') {
       db.run(
         `UPDATE queue SET status = ?, attempts = attempts + 1, last_error = ? WHERE id = ?`,
-        [status, error || 'Unknown error', queueId]
+        [status, errorOrPostId || 'Unknown error', queueId]
       )
     } else {
       db.run(`UPDATE queue SET status = ? WHERE id = ?`, [status, queueId])
@@ -192,6 +193,32 @@ export class QueueService {
       "DELETE FROM queue WHERE status IN ('posted', 'failed', 'skipped') AND posted_at < datetime('now', '-7 days')"
     )
     return result.changes || 0
+  }
+
+  /**
+   * Get posted items with their platform URLs
+   */
+  getPostedItems(): Array<QueueItemWithContent & { postUrl: string }> {
+    const db = getDatabase()
+    const items = db.all<QueueItemWithContent>(
+      `SELECT q.*, c.filename, c.mime_type, c.drive_file_id, c.size_bytes
+       FROM queue q
+       LEFT JOIN content_items c ON q.content_id = c.id
+       WHERE q.status = 'posted' AND q.platform_post_id IS NOT NULL
+       ORDER BY q.posted_at DESC
+       LIMIT 100`
+    )
+
+    // Add platform URLs
+    return items.map((item) => {
+      let postUrl = ''
+      if (item.platform === 'youtube' && item.platform_post_id) {
+        postUrl = `https://youtube.com/shorts/${item.platform_post_id}`
+      } else if (item.platform === 'instagram' && item.platform_post_id) {
+        postUrl = `https://www.instagram.com/p/${item.platform_post_id}/`
+      }
+      return { ...item, postUrl }
+    })
   }
 
   /**

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useAppStore, View } from './stores/appStore'
 import { ToastContainer, useToast } from './components/Toast'
+import { iconMap } from './lib/iconMap'
+import type { LucideIcon } from 'lucide-react'
 
 interface QueueItem {
   id: string
@@ -97,79 +99,103 @@ function App() {
     }
   }, [])
 
-  const navItems: { id: View; label: string; icon: string }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'content', label: 'Content', icon: '📁' },
-    { id: 'queue', label: 'Queue', icon: '📋' },
-    { id: 'schedule', label: 'Schedule', icon: '🕐' },
-    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  const navItems: { id: View; label: string; icon: LucideIcon }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: iconMap.dashboard },
+    { id: 'content', label: 'Content', icon: iconMap.content },
+    { id: 'queue', label: 'Queue', icon: iconMap.queue },
+    { id: 'posted', label: 'Posted', icon: iconMap.posted },
+    { id: 'schedule', label: 'Schedule', icon: iconMap.schedule },
+    { id: 'settings', label: 'Settings', icon: iconMap.settings },
   ]
 
   const isConnected = (platform: string) =>
     accounts.some((a) => a.platform === platform)
 
   return (
-    <div className="flex h-screen bg-gray-900 text-white">
-      {/* Sidebar */}
-      <aside className="w-64 bg-gray-800 flex flex-col">
-        {/* Logo */}
-        <div className="p-4 border-b border-gray-700 drag-region">
-          <h1 className="text-xl font-bold text-blue-400 no-drag">SocialSync</h1>
-          <p className="text-xs text-gray-500 mt-1">v{appVersion}</p>
+    <div className="flex h-screen bg-gradient-to-br from-[#0a0a0a] via-netflix-black to-netflix-black text-white">
+      {/* Sidebar with 3D depth */}
+      <aside className="w-64 bg-gradient-to-b from-[#2F2F2F] to-[#1a1a1a] flex flex-col border-r border-netflix-red/30 shadow-2xl shadow-netflix-red/30">
+        {/* Logo - Enhanced with glow */}
+        <div className="p-5 border-b border-netflix-red/30 drag-region bg-gradient-to-br from-black/20 to-transparent backdrop-blur-sm">
+          <div className="flex flex-col gap-2.5 no-drag">
+            {/* SocialSync Brand */}
+            <div className="relative">
+              <h1 className="text-xl font-black text-white tracking-tight font-poppins">
+                SocialSync
+              </h1>
+
+              {/* by STAGE */}
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[10px] text-gray-400 font-medium">by</span>
+                <img src="/stage-logo-horizontal.png" alt="STAGE" className="h-4 w-auto opacity-90" />
+              </div>
+
+              {/* Tagline */}
+              <p className="text-xs text-gray-400 font-medium mt-2 tracking-wide">
+                Your Social Media Executive
+              </p>
+
+              {/* Elegant underline */}
+              <div className="h-[1px] bg-gradient-to-r from-transparent via-[#7a0600]/50 to-transparent mt-2"></div>
+            </div>
+          </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <ul className="space-y-2">
+        {/* Navigation - Enhanced 3D effect */}
+        <nav className="flex-1 p-4 space-y-1">
+          <ul className="space-y-1.5">
             {navItems.map((item) => (
               <li key={item.id}>
                 <button
                   onClick={() => setCurrentView(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  className={`group w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 ${
                     currentView === item.id
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-300 hover:bg-gray-700'
+                      ? 'bg-gradient-to-r from-[#7a0600] to-[#a01010] text-white shadow-[0_8px_16px] shadow-[#7a0600]/40 scale-105 border border-[#7a0600]/50'
+                      : 'text-netflix-lightGray hover:bg-gradient-to-r hover:from-gray-700/50 hover:to-gray-600/50 hover:text-white hover:shadow-lg shadow-[#7a0600]/20 hover:scale-[1.02] border border-transparent'
                   }`}
                 >
-                  <span className="text-lg">{item.icon}</span>
-                  <span>{item.label}</span>
+                  <item.icon
+                    size={22}
+                    strokeWidth={1.75}
+                    className={`transition-transform duration-300 ${
+                      currentView === item.id ? 'scale-110' : 'group-hover:scale-110'
+                    }`}
+                  />
+                  <span className="font-semibold">{item.label}</span>
+                  {currentView === item.id && (
+                    <span className="ml-auto w-2 h-2 rounded-full bg-[#7a0600] shadow-lg shadow-white/50 animate-pulse"></span>
+                  )}
                 </button>
               </li>
             ))}
           </ul>
         </nav>
 
-        {/* Status Footer */}
-        <div className="p-4 border-t border-gray-700">
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                schedulerPaused ? 'bg-yellow-500' : 'bg-green-500'
-              }`}
-            ></span>
-            <span className="text-sm text-gray-400">
-              {schedulerPaused ? 'Scheduler Paused' : 'Scheduler Active'}
-            </span>
-          </div>
-        </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Content - Enhanced depth */}
       <main className="flex-1 flex flex-col">
-        {/* Header */}
-        <header className="h-14 bg-gray-800 border-b border-gray-700 flex items-center px-6 drag-region">
-          <h2 className="text-lg font-semibold capitalize no-drag">{currentView}</h2>
+        {/* Header - 3D elevated look */}
+        <header className="h-16 bg-gradient-to-br from-[#2F2F2F] to-[#1a1a1a] border-b-2 border-[#7a0600]/40 flex items-center px-6 drag-region shadow-lg shadow-black/50">
+          <div className="flex items-center gap-3 no-drag">
+            <div className="w-1 h-8 bg-gradient-to-r from-[#7a0600] to-[#c60c0c] rounded-full shadow-lg shadow-[#7a0600]/30"></div>
+            <h2 className="text-2xl font-black capitalize text-transparent bg-clip-text bg-gradient-to-r from-[#c60c0c] to-white drop-shadow-lg">{currentView}</h2>
+          </div>
         </header>
 
-        {/* Content Area */}
-        <div className="flex-1 p-6 overflow-auto">
+        {/* Content Area - Enhanced with pattern */}
+        <div className="flex-1 p-6 overflow-auto bg-gradient-to-br from-stage-black via-stage-gray-900 to-stage-maroon/5 relative">
+          <div className="absolute inset-0 opacity-5" style={{backgroundImage: 'radial-gradient(circle at 2px 2px, #e10d37 1px, transparent 0)', backgroundSize: '40px 40px'}}></div>
+          <div className="relative z-10">
           {currentView === 'dashboard' && <DashboardView />}
           {currentView === 'content' && <ContentView isConnected={isConnected} toast={toast} />}
           {currentView === 'queue' && <QueueView toast={toast} />}
+          {currentView === 'posted' && <PostedView toast={toast} />}
           {currentView === 'schedule' && <ScheduleView toast={toast} />}
           {currentView === 'settings' && (
             <SettingsView accounts={accounts} isConnected={isConnected} toast={toast} />
           )}
+          </div>
         </div>
       </main>
 
@@ -241,24 +267,24 @@ function DashboardView() {
         <StatCard
           title="Content Library"
           value={contentCount.toString()}
-          icon="📁"
+          icon={iconMap.content}
         />
         <StatCard
           title="Pending Posts"
           value={queueStats.pending.toString()}
-          icon="📤"
+          icon={iconMap.pending}
           color={postingStatus.dueCount > 0 ? 'yellow' : undefined}
         />
         <StatCard
           title="Posted"
           value={queueStats.posted.toString()}
-          icon="✅"
+          icon={iconMap.success}
           color="green"
         />
         <StatCard
           title="Failed"
           value={queueStats.failed.toString()}
-          icon="❌"
+          icon={iconMap.failed}
           color={queueStats.failed > 0 ? 'red' : undefined}
         />
       </div>
@@ -266,9 +292,10 @@ function DashboardView() {
       {/* Posting Status */}
       {postingStatus.isPaused && (
         <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4">
-          <p className="text-yellow-400">
-            ⚠️ Automated posting is paused. Posts will not be published automatically.
-          </p>
+          <div className="flex items-center gap-2 text-yellow-400">
+            <iconMap.warning size={20} strokeWidth={2} />
+            <p>Automated posting is paused. Posts will not be published automatically.</p>
+          </div>
         </div>
       )}
 
@@ -276,14 +303,14 @@ function DashboardView() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <PlatformDashboard
           platform="instagram"
-          icon="📸"
+          icon={iconMap.instagram}
           label="Instagram"
           isConnected={isConnected('instagram')}
           upcomingPosts={instagramQueue}
         />
         <PlatformDashboard
           platform="youtube"
-          icon="🎬"
+          icon={iconMap.youtube}
           label="YouTube"
           isConnected={isConnected('youtube')}
           upcomingPosts={youtubeQueue}
@@ -291,7 +318,7 @@ function DashboardView() {
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
         <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
         {recentActivity.length === 0 ? (
           <p className="text-gray-400">No recent activity.</p>
@@ -316,11 +343,11 @@ interface Activity {
 }
 
 function ActivityItem({ activity }: { activity: Activity }) {
-  const getIcon = (eventType: string) => {
-    if (eventType.includes('success')) return '✅'
-    if (eventType.includes('failed')) return '❌'
-    if (eventType.includes('scan')) return '🔍'
-    return '📝'
+  const getIcon = (eventType: string): LucideIcon => {
+    if (eventType.includes('success')) return iconMap.success
+    if (eventType.includes('failed')) return iconMap.failed
+    if (eventType.includes('scan')) return iconMap.search
+    return iconMap.activity
   }
 
   const timeAgo = (date: string) => {
@@ -331,9 +358,11 @@ function ActivityItem({ activity }: { activity: Activity }) {
     return `${Math.floor(seconds / 86400)}d ago`
   }
 
+  const IconComponent = getIcon(activity.event_type)
+
   return (
-    <div className="flex items-start gap-3 p-3 bg-gray-700 rounded-lg">
-      <span className="text-xl">{getIcon(activity.event_type)}</span>
+    <div className="flex items-start gap-3 p-3 bg-stage-gray-600 rounded-lg">
+      <IconComponent size={20} strokeWidth={1.75} className="text-stage-ribbon mt-0.5" />
       <div className="flex-1">
         <p className="text-sm">{activity.message}</p>
         <p className="text-xs text-gray-400 mt-1">{timeAgo(activity.created_at)}</p>
@@ -344,21 +373,24 @@ function ActivityItem({ activity }: { activity: Activity }) {
 
 function PlatformDashboard({
   platform,
-  icon,
+  icon: IconComponent,
   label,
   isConnected,
   upcomingPosts,
 }: {
   platform: string
-  icon: string
+  icon: LucideIcon
   label: string
   isConnected: boolean
   upcomingPosts: QueueItem[]
 }) {
+  const iconColor = platform === 'instagram' ? 'text-platform-instagram' : 'text-platform-youtube'
+
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
+    <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span>{icon}</span> {label}
+        <IconComponent size={24} strokeWidth={1.75} className={iconColor} />
+        {label}
       </h3>
       {!isConnected ? (
         <p className="text-gray-400">Connect {label} to see upcoming posts.</p>
@@ -367,7 +399,7 @@ function PlatformDashboard({
       ) : (
         <div className="space-y-2">
           {upcomingPosts.map((post) => (
-            <div key={post.id} className="p-2 bg-gray-700 rounded text-sm">
+            <div key={post.id} className="p-2 bg-stage-gray-600 rounded text-sm">
               <p className="font-medium truncate">{post.filename}</p>
               <p className="text-xs text-gray-400">
                 {new Date(post.scheduled_for).toLocaleString()}
@@ -383,30 +415,41 @@ function PlatformDashboard({
 function StatCard({
   title,
   value,
-  icon,
+  icon: IconComponent,
   color,
 }: {
   title: string
   value: string
-  icon: string
+  icon: LucideIcon
   color?: 'red' | 'green' | 'yellow'
 }) {
   const colorClasses = {
-    red: 'text-red-400',
-    green: 'text-green-400',
-    yellow: 'text-yellow-400',
+    red: 'text-stage-ribbon',
+    green: 'text-semantic-success-500',
+    yellow: 'text-semantic-warning-500',
+  }
+
+  const glowClasses = {
+    red: 'shadow-stage-ribbon/30',
+    green: 'shadow-semantic-success-500/30',
+    yellow: 'shadow-semantic-warning-500/30',
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4">
-      <div className="flex items-center justify-between">
+    <div className={`group relative bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 border-2 border-stage-red/30 rounded-2xl p-6 hover:border-stage-ribbon hover:shadow-2xl ${color ? glowClasses[color] : 'hover:shadow-stage-maroon/30'} transition-all duration-300 hover:scale-105 hover:-translate-y-1`}>
+      <div className="absolute inset-0 bg-gradient-to-br from-stage-ribbon/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+      <div className="relative flex items-center justify-between">
         <div>
-          <p className="text-gray-400 text-sm">{title}</p>
-          <p className={`text-2xl font-bold mt-1 ${color ? colorClasses[color] : ''}`}>
+          <p className="text-gray-300 text-sm font-bold uppercase tracking-wide">{title}</p>
+          <p className={`text-4xl font-black mt-2 ${color ? colorClasses[color] : 'text-white'} drop-shadow-lg`}>
             {value}
           </p>
         </div>
-        <span className="text-3xl">{icon}</span>
+        <IconComponent
+          size={48}
+          strokeWidth={1.5}
+          className="text-stage-ribbon/80 drop-shadow-[0_0_10px_rgba(225,13,55,0.3)] group-hover:scale-110 transition-transform"
+        />
       </div>
     </div>
   )
@@ -475,30 +518,32 @@ function QueueView({ toast }: { toast: ReturnType<typeof useToast> }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-4 border-b border-gray-700 pb-4">
+      <div className="flex gap-3 border-b-2 border-[#7a0600]/30 pb-4">
         <button
           onClick={() => handlePlatformSwitch('instagram')}
-          className={`px-4 py-2 rounded-lg transition-colors ${
+          className={`px-6 py-3 rounded-xl font-bold transition-all duration-300 ${
             selectedPlatform === 'instagram'
-              ? 'bg-blue-600'
-              : 'bg-gray-700 hover:bg-gray-600'
+              ? 'bg-gradient-to-r from-[#7a0600] to-[#c60c0c] text-white shadow-lg shadow-[#7a0600]/40 scale-105 border-2 border-[#7a0600]/50'
+              : 'bg-stage-gray-600 text-gray-300 hover:bg-stage-gray-500 hover:text-white hover:shadow-lg hover:scale-[1.02] border-2 border-transparent'
           }`}
         >
-          📸 Instagram ({queueItems.filter(() => selectedPlatform === 'instagram').length})
+          <iconMap.instagram size={20} strokeWidth={1.75} className="inline mr-2" />
+          Instagram ({queueItems.filter(() => selectedPlatform === 'instagram').length})
         </button>
         <button
           onClick={() => handlePlatformSwitch('youtube')}
-          className={`px-4 py-2 rounded-lg transition-colors ${
+          className={`px-6 py-3 rounded-xl font-bold transition-all duration-300 ${
             selectedPlatform === 'youtube'
-              ? 'bg-blue-600'
-              : 'bg-gray-700 hover:bg-gray-600'
+              ? 'bg-gradient-to-r from-[#7a0600] to-[#c60c0c] text-white shadow-lg shadow-[#7a0600]/40 scale-105 border-2 border-[#7a0600]/50'
+              : 'bg-stage-gray-600 text-gray-300 hover:bg-stage-gray-500 hover:text-white hover:shadow-lg hover:scale-[1.02] border-2 border-transparent'
           }`}
         >
-          🎬 YouTube ({queueItems.filter(() => selectedPlatform === 'youtube').length})
+          <iconMap.youtube size={20} strokeWidth={1.75} className="inline mr-2" />
+          YouTube ({queueItems.filter(() => selectedPlatform === 'youtube').length})
         </button>
       </div>
 
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">
             {selectedPlatform === 'instagram' ? 'Instagram' : 'YouTube'} Queue
@@ -506,7 +551,7 @@ function QueueView({ toast }: { toast: ReturnType<typeof useToast> }) {
           <button
             onClick={handleRefresh}
             disabled={loading}
-            className="px-3 py-1 text-sm bg-gray-700 rounded hover:bg-gray-600 transition-colors disabled:opacity-50"
+            className="px-3 py-1 text-sm bg-stage-gray-600 rounded hover:bg-gray-600 transition-colors disabled:opacity-50"
           >
             {loading ? 'Loading...' : 'Refresh'}
           </button>
@@ -556,10 +601,13 @@ function QueueItemRow({
   const isPast = new Date(item.scheduled_for) < new Date()
   const isUpcoming = new Date(item.scheduled_for) > new Date()
 
+  const PlatformIcon = platform === 'instagram' ? iconMap.instagram : iconMap.youtube
+  const platformColor = platform === 'instagram' ? 'text-platform-instagram' : 'text-platform-youtube'
+
   return (
-    <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+    <div className="flex items-center justify-between p-3 bg-stage-gray-600 rounded-lg">
       <div className="flex items-center gap-3 flex-1">
-        <span className="text-2xl">{platform === 'instagram' ? '📸' : '🎬'}</span>
+        <PlatformIcon size={24} strokeWidth={1.75} className={platformColor} />
         <div className="flex-1">
           <p className="font-medium">{item.filename || 'Unknown file'}</p>
           <p className="text-sm text-gray-400">
@@ -580,7 +628,7 @@ function QueueItemRow({
             item.status === 'pending'
               ? 'bg-yellow-600'
               : item.status === 'processing'
-              ? 'bg-blue-600'
+              ? 'bg-stage-red'
               : item.status === 'posted'
               ? 'bg-green-600'
               : 'bg-red-600'
@@ -766,7 +814,7 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
   if (!isConnected('google')) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center">
-        <span className="text-6xl mb-4">📁</span>
+        <iconMap.googleDrive size={64} strokeWidth={1.5} className="text-gray-400 mb-4" />
         <h3 className="text-xl font-semibold mb-2">Connect Google Drive</h3>
         <p className="text-gray-400 mb-4">
           Go to Settings and connect your Google Drive to browse and select content folders.
@@ -778,13 +826,13 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
   return (
     <div className="space-y-6">
       {/* Selected Folders */}
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Selected Folders</h3>
           <div className="flex gap-2">
             <button
               onClick={openBrowser}
-              className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              className="px-4 py-2 bg-stage-red rounded-lg hover:bg-blue-700 transition-colors text-sm"
             >
               Browse Folders
             </button>
@@ -805,7 +853,7 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
             {selectedFolders.map((folder) => (
               <div
                 key={folder.folderId}
-                className="flex items-center justify-between p-3 bg-gray-700 rounded-lg"
+                className="flex items-center justify-between p-3 bg-stage-gray-600 rounded-lg"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-xl">📂</span>
@@ -826,13 +874,13 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
       {/* Folder Browser Modal */}
       {browsing && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col">
+          <div className="bg-stage-gray-700 rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col">
             <div className="p-4 border-b border-gray-700">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Browse Google Drive</h3>
                 <button
                   onClick={() => setBrowsing(false)}
-                  className="p-1 hover:bg-gray-700 rounded"
+                  className="p-1 hover:bg-stage-gray-600 rounded"
                 >
                   ✕
                 </button>
@@ -865,7 +913,7 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
               {currentPath.length > 0 && (
                 <button
                   onClick={navigateBack}
-                  className="flex items-center gap-2 w-full p-3 bg-gray-700 rounded-lg mb-2 hover:bg-gray-600"
+                  className="flex items-center gap-2 w-full p-3 bg-stage-gray-600 rounded-lg mb-2 hover:bg-gray-600"
                 >
                   <span>⬆️</span>
                   <span>Go Back</span>
@@ -883,13 +931,13 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
                     return (
                       <div
                         key={folder.id}
-                        className="flex items-center justify-between p-3 bg-gray-700 rounded-lg"
+                        className="flex items-center justify-between p-3 bg-stage-gray-600 rounded-lg"
                       >
                         <button
                           onClick={() => navigateToFolder(folder.id, folder.name)}
                           className="flex items-center gap-3 flex-1 text-left hover:text-blue-400"
                         >
-                          <span className="text-xl">📁</span>
+                          <iconMap.content size={20} strokeWidth={1.75} className="text-gray-400" />
                           <span>{folder.name}</span>
                         </button>
                         <button
@@ -898,7 +946,7 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
                           className={`px-3 py-1 rounded text-sm ${
                             isSelected
                               ? 'bg-green-600 cursor-not-allowed'
-                              : 'bg-blue-600 hover:bg-blue-700'
+                              : 'bg-stage-red hover:bg-blue-700'
                           }`}
                         >
                           {isSelected ? 'Selected' : 'Select'}
@@ -914,7 +962,7 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
       )}
 
       {/* Content Library */}
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
         <h3 className="text-lg font-semibold mb-4">
           Content Library ({contentItems.length} items)
         </h3>
@@ -928,10 +976,10 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
             {contentItems.map((item) => (
               <div
                 key={item.id}
-                className="bg-gray-700 rounded-lg overflow-hidden"
+                className="bg-stage-gray-600 rounded-lg overflow-hidden"
               >
                 {/* Thumbnail */}
-                <div className="aspect-[9/16] bg-gray-800 relative">
+                <div className="aspect-[9/16] bg-stage-gray-700 relative">
                   {thumbnails[item.drive_file_id] ? (
                     <img
                       src={thumbnails[item.drive_file_id]}
@@ -939,8 +987,8 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-4xl">🎬</span>
+                    <div className="w-full h-full flex items-center justify-center bg-stage-gray-700">
+                      <iconMap.youtube size={48} strokeWidth={1.5} className="text-gray-500" />
                     </div>
                   )}
                   <span
@@ -948,7 +996,7 @@ function ContentView({ isConnected, toast }: { isConnected: (platform: string) =
                       item.status === 'pending'
                         ? 'bg-yellow-600'
                         : item.status === 'queued'
-                        ? 'bg-blue-600'
+                        ? 'bg-stage-red'
                         : item.status === 'posted'
                         ? 'bg-green-600'
                         : 'bg-red-600'
@@ -1004,7 +1052,7 @@ function ScheduleView({ toast }: { toast: ReturnType<typeof useToast> }) {
     <div className="space-y-6">
       <PlatformSchedule
         platform="instagram"
-        icon="📸"
+        icon={iconMap.instagram}
         label="Instagram"
         account={getAccountForPlatform('instagram')}
         schedule={instagramSchedule}
@@ -1013,7 +1061,7 @@ function ScheduleView({ toast }: { toast: ReturnType<typeof useToast> }) {
       />
       <PlatformSchedule
         platform="youtube"
-        icon="🎬"
+        icon={iconMap.youtube}
         label="YouTube"
         account={getAccountForPlatform('youtube')}
         schedule={youtubeSchedule}
@@ -1036,7 +1084,7 @@ interface Schedule {
 
 function PlatformSchedule({
   platform,
-  icon,
+  icon: IconComponent,
   label,
   account,
   schedule,
@@ -1044,7 +1092,7 @@ function PlatformSchedule({
   toast,
 }: {
   platform: 'instagram' | 'youtube'
-  icon: string
+  icon: LucideIcon
   label: string
   account?: { id: string; account_id: string; account_name: string }
   schedule: Schedule | null
@@ -1119,11 +1167,14 @@ function PlatformSchedule({
     await window.electronAPI?.toggleSchedule(platform, newEnabled)
   }
 
+  const iconColor = platform === 'instagram' ? 'text-platform-instagram' : 'text-platform-youtube'
+
   if (!account) {
     return (
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
         <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
-          <span>{icon}</span> {label} Schedule
+          <IconComponent size={20} strokeWidth={1.75} className={iconColor} />
+          {label} Schedule
         </h3>
         <p className="text-gray-400">
           Connect {label} account in Settings to configure posting schedule.
@@ -1133,10 +1184,11 @@ function PlatformSchedule({
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
+    <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold flex items-center gap-2">
-          <span>{icon}</span> {label} Schedule
+          <IconComponent size={20} strokeWidth={1.75} className={iconColor} />
+          {label} Schedule
         </h3>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -1160,8 +1212,8 @@ function PlatformSchedule({
                 onClick={() => toggleDay(index)}
                 className={`px-3 py-2 rounded transition-colors text-sm ${
                   selectedDays.includes(index)
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-stage-red text-white'
+                    : 'bg-stage-gray-600 text-gray-300 hover:bg-gray-600'
                 }`}
               >
                 {day}
@@ -1178,11 +1230,11 @@ function PlatformSchedule({
               type="time"
               value={newTime}
               onChange={(e) => setNewTime(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
+              className="bg-stage-gray-600 border border-gray-600 rounded px-3 py-2 text-sm"
             />
             <button
               onClick={addTime}
-              className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-700 transition-colors text-sm"
+              className="px-3 py-2 bg-stage-red rounded hover:bg-blue-700 transition-colors text-sm"
             >
               Add Time
             </button>
@@ -1191,7 +1243,7 @@ function PlatformSchedule({
             {times.map((time) => (
               <span
                 key={time}
-                className="px-3 py-1.5 bg-gray-700 rounded text-sm flex items-center gap-2"
+                className="px-3 py-1.5 bg-stage-gray-600 rounded text-sm flex items-center gap-2"
               >
                 {time}
                 <button
@@ -1235,6 +1287,7 @@ function SettingsView({
   isConnected: (platform: string) => boolean
   toast: ReturnType<typeof useToast>
 }) {
+  const { appVersion } = useAppStore()
   const [connecting, setConnecting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [settings, setSettings] = useState({
@@ -1288,6 +1341,39 @@ function SettingsView({
     }
   }
 
+  const { schedulerPaused, setSchedulerPaused } = useAppStore()
+  const [postingStatus, setPostingStatus] = useState({ isPaused: false })
+
+  useEffect(() => {
+    // Load posting status
+    window.electronAPI?.getPostingStatus().then((status: any) => {
+      if (status) {
+        setPostingStatus(status)
+        setSchedulerPaused(status.isPaused)
+      }
+    })
+  }, [setSchedulerPaused])
+
+  const handleToggleScheduler = async () => {
+    try {
+      if (postingStatus.isPaused) {
+        await window.electronAPI?.resumePosting()
+        toast.success('Posting scheduler resumed')
+      } else {
+        await window.electronAPI?.pausePosting()
+        toast.success('Posting scheduler paused')
+      }
+      // Reload status
+      const status = await window.electronAPI?.getPostingStatus()
+      if (status) {
+        setPostingStatus(status)
+        setSchedulerPaused(status.isPaused)
+      }
+    } catch (error) {
+      toast.error('Failed to toggle scheduler')
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-2xl">
       {error && (
@@ -1302,12 +1388,50 @@ function SettingsView({
         </div>
       )}
 
-      <div className="bg-gray-800 rounded-lg p-6">
+      {/* Scheduler Status */}
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
+        <h3 className="text-lg font-semibold mb-4 text-white">Posting Scheduler</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span
+              className={`w-4 h-4 rounded-full animate-pulse shadow-lg ${
+                postingStatus.isPaused ? 'bg-gray-400 shadow-gray-400/50' : 'bg-green-500 shadow-green-500/50'
+              }`}
+            ></span>
+            <div>
+              <p className="font-semibold text-white">
+                {postingStatus.isPaused ? 'Paused' : 'Active'}
+              </p>
+              <p className="text-sm text-gray-400">
+                {postingStatus.isPaused
+                  ? 'Posts will not be published automatically'
+                  : 'Posts will be published on schedule'}
+              </p>
+            </div>
+          </div>
+
+          {/* Toggle Switch */}
+          <button
+            onClick={handleToggleScheduler}
+            className={`relative inline-flex items-center h-8 w-16 rounded-full transition-all duration-300 ${
+              postingStatus.isPaused ? 'bg-gray-600' : 'bg-green-500 shadow-lg shadow-green-500/40'
+            }`}
+          >
+            <span
+              className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${
+                postingStatus.isPaused ? 'translate-x-1' : 'translate-x-9'
+              }`}
+            ></span>
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
         <h3 className="text-lg font-semibold mb-4">Connected Accounts</h3>
         <div className="space-y-3">
           <AccountRow
             name="Google Drive"
-            icon="📁"
+            icon={iconMap.googleDrive}
             connected={isConnected('google')}
             connecting={connecting === 'google'}
             account={accounts.find((a) => a.platform === 'google')}
@@ -1316,7 +1440,7 @@ function SettingsView({
           />
           <AccountRow
             name="Instagram"
-            icon="📸"
+            icon={iconMap.instagram}
             connected={isConnected('instagram')}
             connecting={connecting === 'instagram'}
             account={accounts.find((a) => a.platform === 'instagram')}
@@ -1325,7 +1449,7 @@ function SettingsView({
           />
           <AccountRow
             name="YouTube"
-            icon="🎬"
+            icon={iconMap.youtube}
             connected={isConnected('youtube')}
             connecting={connecting === 'youtube'}
             account={accounts.find((a) => a.platform === 'youtube')}
@@ -1335,7 +1459,7 @@ function SettingsView({
         </div>
       </div>
 
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
         <h3 className="text-lg font-semibold mb-4">Notifications</h3>
         <div className="space-y-3">
           <label className="flex items-center justify-between cursor-pointer">
@@ -1359,7 +1483,7 @@ function SettingsView({
         </div>
       </div>
 
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
         <h3 className="text-lg font-semibold mb-4">General</h3>
         <div className="space-y-3">
           <label className="flex items-center justify-between cursor-pointer">
@@ -1382,13 +1506,61 @@ function SettingsView({
           </label>
         </div>
       </div>
+
+      {/* Version Footer */}
+      <div className="mt-8 p-6 bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 rounded-2xl border border-[#7a0600]/20 shadow-lg shadow-[#7a0600]/10">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-base font-black text-white font-poppins">
+              SocialSync
+            </h4>
+            <p className="text-xs text-gray-400 font-medium mt-0.5">Your Social Media Executive</p>
+          </div>
+
+          <div className="text-right">
+            <p className="text-xs text-gray-400">Version</p>
+            <p className="text-sm font-bold text-white">{appVersion}</p>
+          </div>
+        </div>
+
+        {/* Tech Details */}
+        <div className="mt-4 pt-4 border-t border-[#7a0600]/10">
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Platform</p>
+              <p className="text-xs font-bold text-gray-300">Electron + React</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Status</p>
+              <div className="flex items-center justify-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                <p className="text-xs font-bold text-green-400">Online</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Powered By</p>
+              <img src="/stage-logo-horizontal.png" alt="STAGE" className="h-3 w-auto mx-auto opacity-80" />
+            </div>
+          </div>
+        </div>
+
+        {/* Copyright */}
+        <div className="mt-4 text-center">
+          <p className="text-[10px] text-gray-500">
+            Built with <span className="text-[#7a0600]">❤</span> by{' '}
+            <span className="text-[#7a0600] font-bold">STAGE OTT</span>
+            {' · '}
+            <span className="text-gray-600">© 2026</span>
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
 
 function AccountRow({
   name,
-  icon,
+  icon: IconComponent,
   connected,
   connecting,
   account,
@@ -1396,7 +1568,7 @@ function AccountRow({
   onDisconnect,
 }: {
   name: string
-  icon: string
+  icon: LucideIcon
   connected: boolean
   connecting: boolean
   account?: { id: string; account_name: string }
@@ -1406,7 +1578,7 @@ function AccountRow({
   return (
     <div className="flex items-center justify-between py-3 border-b border-gray-700 last:border-0">
       <div className="flex items-center gap-3">
-        <span className="text-xl">{icon}</span>
+        <IconComponent size={24} strokeWidth={1.75} className="text-stage-ribbon" />
         <div>
           <p className="font-medium">{name}</p>
           {connected && account && (
@@ -1425,11 +1597,150 @@ function AccountRow({
             ? 'bg-gray-600 cursor-wait'
             : connected
             ? 'bg-red-600 hover:bg-red-700'
-            : 'bg-blue-600 hover:bg-blue-700'
+            : 'bg-stage-red hover:bg-blue-700'
         } transition-colors disabled:opacity-50`}
       >
         {connecting ? 'Connecting...' : connected ? 'Disconnect' : 'Connect'}
       </button>
+    </div>
+  )
+}
+
+function PostedView({ toast }: { toast: ReturnType<typeof useToast> }) {
+  const [postedVideos, setPostedVideos] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [selectedPlatform, setSelectedPlatform] = useState<'all' | 'instagram' | 'youtube'>('all')
+
+  const loadPostedVideos = async () => {
+    setLoading(true)
+    try {
+      const items = await window.electronAPI?.getPostedQueue()
+      if (items && Array.isArray(items)) {
+        setPostedVideos(items)
+      }
+    } catch (error) {
+      toast.error('Failed to load posted videos')
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    loadPostedVideos()
+  }, [])
+
+  const filteredVideos = selectedPlatform === 'all'
+    ? postedVideos
+    : postedVideos.filter(v => v.platform === selectedPlatform)
+
+  const openVideoLink = (url: string) => {
+    if (url) {
+      window.open(url, '_blank')
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Posted Videos</h2>
+        <button
+          onClick={loadPostedVideos}
+          disabled={loading}
+          className="px-4 py-2 bg-stage-red rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+        >
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+      </div>
+
+      {/* Platform Filter */}
+      <div className="flex gap-4">
+        <button
+          onClick={() => setSelectedPlatform('all')}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            selectedPlatform === 'all' ? 'bg-stage-red' : 'bg-stage-gray-600 hover:bg-gray-600'
+          }`}
+        >
+          All ({postedVideos.length})
+        </button>
+        <button
+          onClick={() => setSelectedPlatform('youtube')}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            selectedPlatform === 'youtube' ? 'bg-stage-red' : 'bg-stage-gray-600 hover:bg-gray-600'
+          }`}
+        >
+          <iconMap.youtube size={20} strokeWidth={1.75} className="inline mr-2" />
+          YouTube ({postedVideos.filter(v => v.platform === 'youtube').length})
+        </button>
+        <button
+          onClick={() => setSelectedPlatform('instagram')}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            selectedPlatform === 'instagram' ? 'bg-stage-red' : 'bg-stage-gray-600 hover:bg-gray-600'
+          }`}
+        >
+          <iconMap.instagram size={20} strokeWidth={1.75} className="inline mr-2" />
+          Instagram ({postedVideos.filter(v => v.platform === 'instagram').length})
+        </button>
+      </div>
+
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl p-6 border-2 border-stage-red/30 shadow-xl shadow-stage-maroon/10">
+        {loading ? (
+          <div className="text-center py-8 text-gray-400">Loading posted videos...</div>
+        ) : filteredVideos.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-400 mb-2">No posted videos yet.</p>
+            <p className="text-gray-500 text-sm">
+              Videos will appear here once they are successfully posted.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredVideos.map((video) => (
+              <div
+                key={video.id}
+                className="flex items-center justify-between p-4 bg-stage-gray-600 rounded-lg hover:bg-gray-650 transition-colors"
+              >
+                <div className="flex items-center gap-4 flex-1">
+                  {video.platform === 'youtube' ? (
+                    <iconMap.youtube size={32} strokeWidth={1.5} className="text-platform-youtube" />
+                  ) : (
+                    <iconMap.instagram size={32} strokeWidth={1.5} className="text-platform-instagram" />
+                  )}
+                  <div className="flex-1">
+                    <p className="font-medium">{video.filename}</p>
+                    <p className="text-sm text-gray-400">
+                      Posted {new Date(video.posted_at).toLocaleString()}
+                    </p>
+                    {video.platform === 'youtube' && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Channel: Kunal Kumrawat
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="px-3 py-1 text-xs rounded bg-green-600">
+                    Posted
+                  </span>
+                  {video.postUrl && (
+                    <button
+                      onClick={() => openVideoLink(video.postUrl)}
+                      className="px-4 py-2 bg-stage-red rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center gap-2"
+                    >
+                      <span>View on {video.platform === 'youtube' ? 'YouTube' : 'Instagram'}</span>
+                      <span>↗</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+        <p className="text-blue-400 text-sm">
+          💡 <strong>Tip:</strong> Click "View on YouTube" to open the posted video in your browser and get the shareable link!
+        </p>
+      </div>
     </div>
   )
 }

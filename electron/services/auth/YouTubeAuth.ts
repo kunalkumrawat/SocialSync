@@ -76,29 +76,42 @@ export class YouTubeAuthService extends AuthService {
     email?: string
     profileUrl?: string
   }> {
-    // Get the user's YouTube channel info
-    const response = await axios.get<YouTubeChannelResponse>(
-      'https://www.googleapis.com/youtube/v3/channels',
-      {
-        params: {
-          part: 'snippet',
-          mine: true,
-        },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+    try {
+      // Get the user's YouTube channel info
+      const response = await axios.get<YouTubeChannelResponse>(
+        'https://www.googleapis.com/youtube/v3/channels',
+        {
+          params: {
+            part: 'snippet',
+            mine: true,
+          },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      const channel = response.data.items?.[0]
+      if (!channel) {
+        throw new Error('No YouTube channel found for this account')
       }
-    )
 
-    const channel = response.data.items?.[0]
-    if (!channel) {
-      throw new Error('No YouTube channel found for this account')
-    }
-
-    return {
-      accountId: channel.id,
-      accountName: channel.snippet.title,
-      profileUrl: channel.snippet.thumbnails.default.url,
+      return {
+        accountId: channel.id,
+        accountName: channel.snippet.title,
+        profileUrl: channel.snippet.thumbnails.default.url,
+      }
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error(
+          'YouTube Data API v3 is not enabled. Please enable it in Google Cloud Console:\n' +
+          '1. Go to https://console.cloud.google.com/apis/library/youtube.googleapis.com\n' +
+          '2. Select your project\n' +
+          '3. Click "ENABLE"\n' +
+          '4. Try connecting again'
+        )
+      }
+      throw error
     }
   }
 

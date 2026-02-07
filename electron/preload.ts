@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('queue:reschedule', itemId, newTime),
   getQueueStats: () => ipcRenderer.invoke('queue:getStats'),
   clearCompletedQueue: () => ipcRenderer.invoke('queue:clearCompleted'),
+  getPostedQueue: () => ipcRenderer.invoke('queue:getPosted'),
   onQueueUpdated: (callback: () => void) => {
     ipcRenderer.on('queue:updated', () => callback())
   },

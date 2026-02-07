@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { AuthService, OAuthConfig } from './AuthService'
 import { getTokenStore, TokenData } from './TokenStore'
+import { validateAndThrow } from '../../utils/credential-validator'
 
 // Instagram uses Facebook/Meta OAuth
 // Requires a Facebook App with Instagram Basic Display or Instagram Graph API
@@ -51,6 +52,39 @@ interface InstagramAccountResponse {
 export class InstagramAuthService extends AuthService {
   constructor() {
     super('instagram', INSTAGRAM_CONFIG)
+
+    // Validate credentials on initialization
+    this.validateCredentials()
+  }
+
+  private credentialValidationError: any = null
+
+  /**
+   * Validate Meta/Instagram OAuth credentials
+   */
+  private validateCredentials(): void {
+    try {
+      validateAndThrow('meta', this.config.clientId, this.config.clientSecret)
+      console.log('[InstagramAuth] Credentials validated successfully')
+    } catch (error: any) {
+      console.error('[InstagramAuth] Credential validation failed:', error.message)
+      this.credentialValidationError = error
+    }
+  }
+
+  /**
+   * Override authenticate to check credentials first
+   */
+  async authenticate() {
+    if (this.credentialValidationError) {
+      throw new Error(
+        'Instagram/Meta OAuth credentials not configured. ' +
+        'Please update .env file with valid META_APP_ID and META_APP_SECRET. ' +
+        'See SETUP_CREDENTIALS.md for instructions.'
+      )
+    }
+
+    return super.authenticate()
   }
 
   protected async exchangeCodeForTokens(code: string): Promise<TokenData> {

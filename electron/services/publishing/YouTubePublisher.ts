@@ -55,6 +55,31 @@ export class YouTubePublisher implements Publisher {
   }
 
   /**
+   * Format filename into a clean, readable title
+   */
+  private formatTitle(filename: string): string {
+    // Remove file extension
+    let title = filename.replace(/\.(mp4|mov|webm|mkv|avi|m4v|mpeg|3gpp|flv)$/i, '')
+
+    // Replace underscores and hyphens with spaces
+    title = title.replace(/[_-]/g, ' ')
+
+    // Capitalize each word
+    title = title
+      .split(' ')
+      .map(word => {
+        // Skip empty strings from multiple spaces
+        if (!word) return ''
+        // Capitalize first letter, lowercase the rest
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      })
+      .filter(word => word) // Remove empty strings
+      .join(' ')
+
+    return title
+  }
+
+  /**
    * Upload video to YouTube
    */
   private async uploadVideo(
@@ -64,13 +89,16 @@ export class YouTubePublisher implements Publisher {
   ): Promise<string | null> {
     try {
       const filename = filePath.split('/').pop() || 'video.mp4'
-      const title = metadata?.title || filename
+      const formattedTitle = this.formatTitle(filename)
+      const title = metadata?.title || formattedTitle
       const description = metadata?.description || ''
+
+      console.log(`[YouTubePublisher] Formatted title: "${formattedTitle}" from filename: "${filename}"`)
 
       // Step 1: Initialize resumable upload
       const videoMetadata = {
         snippet: {
-          title: `#Shorts ${title}`,
+          title: `${title} #Shorts`,
           description: `${description}\n\n#Shorts`,
           categoryId: '22', // People & Blogs
         },

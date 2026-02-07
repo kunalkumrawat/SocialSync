@@ -1,5 +1,7 @@
+import 'dotenv/config'
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import path from 'path'
+import crypto from 'crypto'
 import { getDatabase } from './services/database/DatabaseService'
 import { getSettings } from './services/settings/SettingsService'
 import { getGoogleAuth, getYouTubeAuth, getInstagramAuth } from './services/auth'
@@ -164,6 +166,11 @@ app.whenReady().then(async () => {
 
   postingService.start()
   console.log('[Main] Posting service started')
+
+  // Generate queue from active schedules on startup
+  const scheduleService = getScheduleService()
+  const queueResult = scheduleService.generateQueueFromActiveSchedules(7)
+  console.log(`[Main] Startup queue generation: Instagram=${queueResult.instagram}, YouTube=${queueResult.youtube}`)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -459,6 +466,11 @@ ipcMain.handle('queue:clearCompleted', async () => {
   return count
 })
 
+ipcMain.handle('queue:getPosted', async () => {
+  const queueService = getQueueService()
+  return queueService.getPostedItems()
+})
+
 // Schedule
 ipcMain.handle('schedule:getAll', async () => {
   const scheduleService = getScheduleService()
@@ -494,7 +506,16 @@ ipcMain.handle('schedule:save', async (_event, schedule) => {
 ipcMain.handle('schedule:toggle', async (_event, platform: string, enabled: boolean) => {
   const scheduleService = getScheduleService()
   scheduleService.toggleSchedule(platform as 'instagram' | 'youtube', enabled)
+
+  // If enabling, generate queue for the next 7 days
+  if (enabled) {
+    console.log(`[Main] Generating queue for ${platform} after enabling schedule`)
+    const result = scheduleService.generateQueueFromActiveSchedules(7)
+    console.log(`[Main] Generated queue:`, result)
+  }
+
   mainWindow?.webContents.send('schedule:updated')
+  mainWindow?.webContents.send('queue:updated')
 })
 
 ipcMain.handle('schedule:delete', async (_event, scheduleId: string) => {
@@ -518,7 +539,20 @@ ipcMain.handle('schedule:getNextTime', async (_event, platform: string) => {
 // Activity log
 ipcMain.handle('activity:get', async (_event, limit = 50) => {
   const db = getDatabase()
-  return db.all('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ?', [limit])
+  return db.all(
+    `SELECT
+      id,
+      event_type,
+      content_id,
+      platform,
+      message,
+      metadata,
+      created_at || 'Z' as created_at
+    FROM activity_log
+    ORDER BY created_at DESC
+    LIMIT ?`,
+    [limit]
+  )
 })
 
 // Posting

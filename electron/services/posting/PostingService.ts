@@ -166,8 +166,8 @@ export class PostingService {
       driveService.cleanupFile(filePath)
 
       if (result.success) {
-        // Success!
-        queueService.updateQueueStatus(item.id, 'posted')
+        // Success! Save the post ID (YouTube video ID or Instagram post ID)
+        queueService.updateQueueStatus(item.id, 'posted', result.postId)
         driveService.updateContentStatus(item.content_id, 'posted')
 
         logActivity('post_success', `Successfully posted to ${item.platform}`, {
@@ -177,7 +177,7 @@ export class PostingService {
         })
 
         this.notifyProgress(item.platform, 'posted', item.filename)
-        console.log(`[PostingService] ✅ Successfully posted ${item.filename} to ${item.platform}`)
+        console.log(`[PostingService] ✅ Successfully posted ${item.filename} to ${item.platform} (Post ID: ${result.postId})`)
       } else {
         throw new Error(result.error || 'Unknown publishing error')
       }

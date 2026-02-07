@@ -32,6 +32,7 @@ export interface ElectronAPI {
     skipped: number
   }>
   clearCompletedQueue: () => Promise<number>
+  getPostedQueue: () => Promise<unknown[]>
   onQueueUpdated: (callback: () => void) => void
   getSchedules: () => Promise<unknown[]>
   getScheduleForPlatform: (platform: string) => Promise<unknown | null>

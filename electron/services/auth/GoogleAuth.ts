@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { AuthService, OAuthConfig } from './AuthService'
 import { getTokenStore, TokenData } from './TokenStore'
+import { validateAndThrow } from '../../utils/credential-validator'
 
 // Google OAuth configuration
 // NOTE: In production, these should be in environment variables or a config file
@@ -36,6 +37,48 @@ interface GoogleUserInfo {
 export class GoogleAuthService extends AuthService {
   constructor() {
     super('google', GOOGLE_CONFIG)
+
+    // Validate credentials on initialization
+    this.validateCredentials()
+  }
+
+  /**
+   * Validate Google OAuth credentials
+   * Throws CredentialValidationException if invalid
+   */
+  private validateCredentials(): void {
+    try {
+      validateAndThrow('google', this.config.clientId, this.config.clientSecret)
+      console.log('[GoogleAuth] Credentials validated successfully')
+    } catch (error: any) {
+      console.error('[GoogleAuth] Credential validation failed:', error.message)
+
+      // Log helpful setup instructions
+      if (error.getHelpMessage) {
+        console.error('\n' + error.getHelpMessage())
+      }
+
+      // Don't throw - allow app to start, but auth will fail with helpful message
+      // Store the validation error to show when user tries to connect
+      this.credentialValidationError = error
+    }
+  }
+
+  private credentialValidationError: any = null
+
+  /**
+   * Override authenticate to check credentials first
+   */
+  async authenticate() {
+    if (this.credentialValidationError) {
+      throw new Error(
+        'Google OAuth credentials not configured. ' +
+        'Please update .env file with valid GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. ' +
+        'See SETUP_CREDENTIALS.md for instructions.'
+      )
+    }
+
+    return super.authenticate()
   }
 
   protected async exchangeCodeForTokens(code: string): Promise<TokenData> {

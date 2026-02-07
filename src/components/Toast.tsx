@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react'
 
 export interface ToastMessage {
   id: string
@@ -32,33 +33,35 @@ function Toast({ toast, onRemove }: { toast: ToastMessage; onRemove: (id: string
   }, [toast, onRemove])
 
   const colors = {
-    success: 'bg-green-600 border-green-500',
-    error: 'bg-red-600 border-red-500',
-    info: 'bg-blue-600 border-blue-500',
-    warning: 'bg-yellow-600 border-yellow-500',
+    success: 'bg-semantic-success-600 border-semantic-success-500',
+    error: 'bg-semantic-error-600 border-semantic-error-500',
+    info: 'bg-semantic-info-600 border-semantic-info-500',
+    warning: 'bg-semantic-warning-600 border-semantic-warning-500',
   }
 
-  const icons = {
-    success: '✅',
-    error: '❌',
-    info: 'ℹ️',
-    warning: '⚠️',
+  const iconMap = {
+    success: CheckCircle2,
+    error: XCircle,
+    info: Info,
+    warning: AlertTriangle,
   }
+
+  const IconComponent = iconMap[toast.type]
 
   return (
     <div
       className={`${colors[toast.type]} border rounded-lg shadow-lg p-4 min-w-[300px] max-w-[400px] animate-slide-in`}
     >
       <div className="flex items-start gap-3">
-        <span className="text-xl">{icons[toast.type]}</span>
+        <IconComponent size={20} strokeWidth={2} className="text-white mt-0.5" />
         <div className="flex-1">
           <p className="text-white text-sm">{toast.message}</p>
         </div>
         <button
           onClick={() => onRemove(toast.id)}
-          className="text-white hover:text-gray-200 text-sm"
+          className="text-white hover:text-gray-200"
         >
-          ✕
+          <X size={16} strokeWidth={2} />
         </button>
       </div>
     </div>

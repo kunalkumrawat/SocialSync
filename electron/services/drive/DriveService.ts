@@ -14,6 +14,12 @@ const SUPPORTED_MIME_TYPES = [
   'video/quicktime', // .mov
   'video/webm',
   'video/x-m4v',
+  'video/x-matroska', // .mkv
+  'video/avi',
+  'video/x-msvideo', // .avi
+  'video/mpeg',
+  'video/3gpp',
+  'video/x-flv',
 ]
 
 // Duration limits (in seconds)
@@ -92,10 +98,50 @@ export class DriveService {
       query += " and 'root' in parents"
     }
 
+    try {
+      const response = await axios.get(`${DRIVE_API_BASE}/files`, {
+        params: {
+          q: query,
+          fields: 'files(id,name,parents)',
+          orderBy: 'name',
+          pageSize: 100,
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      return response.data.files.map((file: { id: string; name: string; parents?: string[] }) => ({
+        id: file.id,
+        name: file.name,
+        parentId: file.parents?.[0],
+      }))
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error(
+          'Google Drive API is not enabled. Please enable it in Google Cloud Console:\n' +
+          '1. Go to https://console.cloud.google.com/apis/library/drive.googleapis.com\n' +
+          '2. Select your project\n' +
+          '3. Click "ENABLE"\n' +
+          '4. Try again'
+        )
+      }
+      throw error
+    }
+  }
+
+  /**
+   * List ALL files in a folder (for debugging)
+   */
+  async listAllFiles(folderId: string): Promise<DriveFile[]> {
+    const token = await this.getAccessToken()
+
+    const query = `'${folderId}' in parents and trashed=false`
+
     const response = await axios.get(`${DRIVE_API_BASE}/files`, {
       params: {
         q: query,
-        fields: 'files(id,name,parents)',
+        fields: 'files(id,name,mimeType,size,createdTime,modifiedTime)',
         orderBy: 'name',
         pageSize: 100,
       },
@@ -104,11 +150,7 @@ export class DriveService {
       },
     })
 
-    return response.data.files.map((file: { id: string; name: string; parents?: string[] }) => ({
-      id: file.id,
-      name: file.name,
-      parentId: file.parents?.[0],
-    }))
+    return response.data.files
   }
 
   /**
@@ -117,9 +159,21 @@ export class DriveService {
   async listVideos(folderId: string): Promise<DriveFile[]> {
     const token = await this.getAccessToken()
 
+    // First, list all files for debugging
+    const allFiles = await this.listAllFiles(folderId)
+    console.log(`[DriveService] Total files in folder: ${allFiles.length}`)
+    if (allFiles.length > 0) {
+      console.log(`[DriveService] Sample files:`)
+      allFiles.slice(0, 5).forEach(f => {
+        console.log(`  - ${f.name} (${f.mimeType})`)
+      })
+    }
+
     // Build query for video files
     const mimeTypeQueries = SUPPORTED_MIME_TYPES.map((mt) => `mimeType='${mt}'`).join(' or ')
     const query = `(${mimeTypeQueries}) and '${folderId}' in parents and trashed=false`
+
+    console.log(`[DriveService] Querying for videos with MIME types: ${SUPPORTED_MIME_TYPES.join(', ')}`)
 
     const response = await axios.get(`${DRIVE_API_BASE}/files`, {
       params: {
@@ -249,65 +303,123 @@ export class DriveService {
   /**
    * Scan selected folders for new video content
    */
+  /**
+   * Recursively scan a folder and its subfolders for videos
+   */
+  private async scanFolderRecursive(
+    folderId: string,
+    folderName: string,
+    db: any,
+    discovered: { count: number },
+    skipped: { count: number },
+    depth: number = 0,
+    maxDepth: number = 3
+  ): Promise<void> {
+    if (depth > maxDepth) {
+      console.log(`[DriveService] Max depth reached for ${folderName}, skipping deeper subfolders`)
+      return
+    }
+
+    const indent = '  '.repeat(depth)
+    console.log(`${indent}[DriveService] Scanning: ${folderName} (depth ${depth})`)
+
+    // Scan for videos in current folder
+    const videos = await this.listVideos(folderId)
+    console.log(`${indent}[DriveService] Found ${videos.length} video(s) in ${folderName}`)
+
+    for (const video of videos) {
+      console.log(`${indent}  - ${video.name} (${video.mimeType}, ${video.size} bytes)`)
+
+      // Check if already in database
+      const existing = db.get<{ id: string }>(
+        'SELECT id FROM content_items WHERE drive_file_id = ?',
+        [video.id]
+      )
+
+      if (existing) {
+        console.log(`${indent}  ✓ Already in database`)
+        skipped.count++
+        continue
+      }
+
+      // Validate video meets requirements
+      const sizeBytes = parseInt(video.size, 10)
+      const maxSizeBytes = 1024 * 1024 * 1024 // 1GB max
+
+      if (sizeBytes > maxSizeBytes) {
+        console.log(`${indent}  ✗ Too large (${(sizeBytes / 1024 / 1024).toFixed(1)} MB)`)
+        skipped.count++
+        continue
+      }
+
+      // Add to database
+      const id = uuidv4()
+      db.run(
+        `INSERT INTO content_items
+         (id, drive_file_id, folder_id, filename, mime_type, size_bytes, created_at, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+        [
+          id,
+          video.id,
+          folderId,
+          video.name,
+          video.mimeType,
+          sizeBytes,
+          video.createdTime,
+        ]
+      )
+
+      console.log(`${indent}  ✓ Added to library`)
+      discovered.count++
+    }
+
+    // Recursively scan subfolders
+    try {
+      const subfolders = await this.listFolders(folderId)
+      if (subfolders.length > 0) {
+        console.log(`${indent}[DriveService] Found ${subfolders.length} subfolder(s), scanning recursively...`)
+        for (const subfolder of subfolders) {
+          await this.scanFolderRecursive(
+            subfolder.id,
+            subfolder.name,
+            db,
+            discovered,
+            skipped,
+            depth + 1,
+            maxDepth
+          )
+        }
+      }
+    } catch (error) {
+      console.error(`${indent}[DriveService] Error listing subfolders:`, error)
+    }
+  }
+
   async scanForContent(): Promise<{ discovered: number; skipped: number }> {
     const db = getDatabase()
     const folders = this.getSelectedFolders()
 
-    let discovered = 0
-    let skipped = 0
+    console.log(`[DriveService] Starting recursive scan of ${folders.length} folder(s)`)
+
+    const discovered = { count: 0 }
+    const skipped = { count: 0 }
 
     for (const folder of folders) {
       try {
-        const videos = await this.listVideos(folder.folderId)
-
-        for (const video of videos) {
-          // Check if already in database
-          const existing = db.get<{ id: string }>(
-            'SELECT id FROM content_items WHERE drive_file_id = ?',
-            [video.id]
-          )
-
-          if (existing) {
-            skipped++
-            continue
-          }
-
-          // Validate video meets requirements
-          const sizeBytes = parseInt(video.size, 10)
-          const maxSizeBytes = 1024 * 1024 * 1024 // 1GB max
-
-          if (sizeBytes > maxSizeBytes) {
-            console.log(`[DriveService] Skipping ${video.name}: too large (${sizeBytes} bytes)`)
-            skipped++
-            continue
-          }
-
-          // Add to database
-          const id = uuidv4()
-          db.run(
-            `INSERT INTO content_items
-             (id, drive_file_id, folder_id, filename, mime_type, size_bytes, created_at, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-            [
-              id,
-              video.id,
-              folder.folderId,
-              video.name,
-              video.mimeType,
-              sizeBytes,
-              video.createdTime,
-            ]
-          )
-
-          discovered++
-        }
+        await this.scanFolderRecursive(
+          folder.folderId,
+          folder.folderName,
+          db,
+          discovered,
+          skipped
+        )
       } catch (error) {
         console.error(`[DriveService] Error scanning folder ${folder.folderName}:`, error)
       }
     }
 
-    console.log(`[DriveService] Scan complete: ${discovered} discovered, ${skipped} skipped`)
-    return { discovered, skipped }
+    console.log(`[DriveService] Scan complete: ${discovered.count} discovered, ${skipped.count} skipped`)
+    return { discovered: discovered.count, skipped: skipped.count }
   }
 
   /**
@@ -340,7 +452,21 @@ export class DriveService {
       params.push(options.limit)
     }
 
-    return db.all(query, params)
+    const rows = db.all<any>(query, params)
+
+    // Map snake_case to camelCase
+    return rows.map((row) => ({
+      id: row.id,
+      driveFileId: row.drive_file_id,
+      folderId: row.folder_id,
+      filename: row.filename,
+      mimeType: row.mime_type,
+      sizeBytes: row.size_bytes,
+      durationSeconds: row.duration_seconds,
+      createdAt: row.created_at,
+      discoveredAt: row.discovered_at,
+      status: row.status,
+    }))
   }
 
   /**
@@ -348,9 +474,25 @@ export class DriveService {
    */
   getNextContent(): ContentItem | null {
     const db = getDatabase()
-    return db.get(
+    const row = db.get<any>(
       "SELECT * FROM content_items WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1"
     )
+
+    if (!row) return null
+
+    // Map snake_case to camelCase
+    return {
+      id: row.id,
+      driveFileId: row.drive_file_id,
+      folderId: row.folder_id,
+      filename: row.filename,
+      mimeType: row.mime_type,
+      sizeBytes: row.size_bytes,
+      durationSeconds: row.duration_seconds,
+      createdAt: row.created_at,
+      discoveredAt: row.discovered_at,
+      status: row.status,
+    }
   }
 
   /**
