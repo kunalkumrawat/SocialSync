@@ -36,3 +36,4 @@ yarn-error.log*
 *secret*.json
 *.pem
 *.key
+.vercel
