@@ -1321,9 +1321,10 @@ function ActivityItem({ activity }: { activity: Activity }) {
   if (activity.event_type === 'post_success' && activity.platform === 'youtube' && activity.metadata) {
     try {
       const metadata = JSON.parse(activity.metadata)
-      if (metadata?.metadata?.postId) {
+      // metadata structure: {"postId":"VIDEO_ID","filename":"..."}
+      if (metadata?.postId) {
         // Add autoplay parameter for immediate video playback
-        youtubeUrl = `https://www.youtube.com/watch?v=${metadata.metadata.postId}&autoplay=1`
+        youtubeUrl = `https://www.youtube.com/watch?v=${metadata.postId}&autoplay=1`
         isYouTubePost = true
       }
     } catch (e) {
