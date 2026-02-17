@@ -1015,6 +1015,154 @@ function ChannelWorkspace({
   )
 }
 
+function DetailModal({
+  type,
+  onClose,
+  toast,
+}: {
+  type: 'content' | 'pending' | 'posted' | 'failed'
+  onClose: () => void
+  toast: ReturnType<typeof useToast>
+}) {
+  const [items, setItems] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadItems()
+  }, [type])
+
+  const loadItems = async () => {
+    setLoading(true)
+    try {
+      if (type === 'content') {
+        const content = await window.electronAPI?.getContent({ limit: 10000 })
+        setItems(content || [])
+      } else if (type === 'pending') {
+        const igQueue = await window.electronAPI?.getQueue('instagram')
+        const ytQueue = await window.electronAPI?.getQueue('youtube')
+        const allQueue = [...(igQueue || []), ...(ytQueue || [])].filter(item => item.status === 'pending')
+        setItems(allQueue)
+      } else if (type === 'posted') {
+        const posted = await window.electronAPI?.getPostedQueue()
+        setItems(posted || [])
+      } else if (type === 'failed') {
+        const igQueue = await window.electronAPI?.getQueue('instagram')
+        const ytQueue = await window.electronAPI?.getQueue('youtube')
+        const allQueue = [...(igQueue || []), ...(ytQueue || [])].filter(item => item.status === 'failed')
+        setItems(allQueue)
+      }
+    } catch (error) {
+      toast.error('Failed to load items')
+    }
+    setLoading(false)
+  }
+
+  const getTitle = () => {
+    switch (type) {
+      case 'content': return 'Content Library'
+      case 'pending': return 'Pending Posts'
+      case 'posted': return 'Posted Videos'
+      case 'failed': return 'Failed Posts'
+    }
+  }
+
+  const openDriveFile = (fileId: string) => {
+    const url = `https://drive.google.com/file/d/${fileId}/view`
+    window.open(url, '_blank')
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 rounded-2xl border-2 border-stage-red/30 max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-stage-red/30">
+          <h2 className="text-2xl font-bold">{getTitle()} ({items.length})</h2>
+          <button onClick={onClose} className="p-2 hover:bg-stage-gray-600 rounded-lg transition-colors">
+            <iconMap.close size={24} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+          {loading ? (
+            <div className="text-center py-12">
+              <iconMap.loading size={48} className="mx-auto mb-4 animate-spin text-stage-ribbon" />
+              <p className="text-gray-400">Loading...</p>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <p>No items found.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {items.map((item) => (
+                <div key={item.id} className="flex items-center justify-between p-4 bg-stage-gray-600 rounded-lg hover:bg-stage-gray-500 transition-colors">
+                  <div className="flex-1">
+                    <p className="font-medium">{item.filename}</p>
+                    <div className="flex gap-4 text-sm text-gray-400 mt-1">
+                      {type === 'content' && (
+                        <>
+                          <span>{item.mime_type}</span>
+                          <span>{((item.size_bytes || 0) / 1024 / 1024).toFixed(1)} MB</span>
+                          <span>Status: {item.status}</span>
+                          {item.folder_id && <span>Folder ID: {item.folder_id.slice(0, 8)}...</span>}
+                        </>
+                      )}
+                      {(type === 'pending' || type === 'failed' || type === 'posted') && (
+                        <>
+                          <span>Platform: {item.platform}</span>
+                          {item.scheduled_for && <span>Scheduled: {new Date(item.scheduled_for).toLocaleString()}</span>}
+                          {item.posted_at && <span>Posted: {new Date(item.posted_at).toLocaleString()}</span>}
+                          {type === 'failed' && item.last_error && <span className="text-red-400">Error: {item.last_error}</span>}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {type === 'failed' && item.drive_file_id && (
+                      <button
+                        onClick={() => openDriveFile(item.drive_file_id)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors flex items-center gap-2"
+                      >
+                        <iconMap.googleDrive size={16} />
+                        <span>View in Drive</span>
+                        <span>↗</span>
+                      </button>
+                    )}
+                    {type === 'posted' && item.platform === 'youtube' && item.platform_post_id && (
+                      <button
+                        onClick={() => {
+                          const url = `https://www.youtube.com/watch?v=${item.platform_post_id}&autoplay=1`
+                          window.open(url, '_blank')
+                        }}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm transition-colors flex items-center gap-2"
+                      >
+                        <iconMap.youtube size={16} />
+                        <span>View on YouTube</span>
+                        <span>↗</span>
+                      </button>
+                    )}
+                    {type === 'content' && item.drive_file_id && (
+                      <button
+                        onClick={() => openDriveFile(item.drive_file_id)}
+                        className="px-4 py-2 bg-stage-red hover:bg-stage-ribbon rounded-lg text-sm transition-colors flex items-center gap-2"
+                      >
+                        <iconMap.googleDrive size={16} />
+                        <span>View in Drive</span>
+                        <span>↗</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DashboardView({ toast }: { toast: ReturnType<typeof useToast> }) {
   const { accounts } = useAppStore()
   const [queueStats, setQueueStats] = useState({ pending: 0, posted: 0, failed: 0 })
@@ -1029,6 +1177,7 @@ function DashboardView({ toast }: { toast: ReturnType<typeof useToast> }) {
     byChannel: { channelName: string; count: number }[]
   } | null>(null)
   const [isScheduling, setIsScheduling] = useState(false)
+  const [showDetailModal, setShowDetailModal] = useState<'content' | 'pending' | 'posted' | 'failed' | null>(null)
 
   const loadDashboard = async () => {
     // Load queue stats
@@ -1219,28 +1368,32 @@ function DashboardView({ toast }: { toast: ReturnType<typeof useToast> }) {
           title="Content Library"
           value={contentCount.toString()}
           icon={iconMap.content}
-          helpText="Total videos discovered in your connected Google Drive folders. These videos are available but not yet scheduled for posting. Go to Content tab to browse and schedule them."
+          helpText="Click to see all videos discovered in your Google Drive folders. View where they're from and how they're scheduled for posting."
+          onClick={() => setShowDetailModal('content')}
         />
         <StatCard
           title="Pending Posts"
           value={queueStats.pending.toString()}
           icon={iconMap.pending}
           color={postingStatus.dueCount > 0 ? 'yellow' : undefined}
-          helpText="Videos scheduled to post at specific times. These are queued and waiting to be published to Instagram or YouTube. Go to Queue tab to manage scheduled posts."
+          helpText="Click to see all videos scheduled to post. View scheduled times and manage your posting queue."
+          onClick={() => setShowDetailModal('pending')}
         />
         <StatCard
           title="Posted"
           value={queueStats.posted.toString()}
           icon={iconMap.success}
           color="green"
-          helpText="Videos successfully published to your social media platforms. These posts are now live on Instagram and/or YouTube. Go to Posted tab to see details."
+          helpText="Click to see all videos successfully published to your social media platforms with direct links to view them."
+          onClick={() => setShowDetailModal('posted')}
         />
         <StatCard
           title="Failed"
           value={queueStats.failed.toString()}
           icon={iconMap.failed}
           color={queueStats.failed > 0 ? 'red' : undefined}
-          helpText="Videos that encountered errors during posting. Common issues include authentication problems or platform API errors. Go to Queue tab to retry failed posts."
+          helpText="Click to see all videos that failed to post, with Google Drive links to access the original files and retry."
+          onClick={() => setShowDetailModal('failed')}
         />
       </div>
 
@@ -1285,6 +1438,15 @@ function DashboardView({ toast }: { toast: ReturnType<typeof useToast> }) {
           </div>
         )}
       </div>
+
+      {/* Detail Modal */}
+      {showDetailModal && (
+        <DetailModal
+          type={showDetailModal}
+          onClose={() => setShowDetailModal(null)}
+          toast={toast}
+        />
+      )}
     </div>
   )
 }
@@ -1417,12 +1579,14 @@ function StatCard({
   icon: IconComponent,
   color,
   helpText,
+  onClick,
 }: {
   title: string
   value: string
   icon: LucideIcon
   color?: 'red' | 'green' | 'yellow'
   helpText?: string
+  onClick?: () => void
 }) {
   const colorClasses = {
     red: 'text-stage-ribbon',
@@ -1437,7 +1601,9 @@ function StatCard({
   }
 
   return (
-    <div className={`group relative bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 border-2 border-stage-red/30 rounded-2xl p-6 hover:border-stage-ribbon hover:shadow-2xl ${color ? glowClasses[color] : 'hover:shadow-stage-maroon/30'} transition-all duration-300 hover:scale-105 hover:-translate-y-1`}>
+    <div
+      onClick={onClick}
+      className={`group relative bg-gradient-to-br from-stage-gray-700 to-stage-gray-800 border-2 border-stage-red/30 rounded-2xl p-6 hover:border-stage-ribbon hover:shadow-2xl ${color ? glowClasses[color] : 'hover:shadow-stage-maroon/30'} transition-all duration-300 hover:scale-105 hover:-translate-y-1 ${onClick ? 'cursor-pointer' : ''}`}>
       <div className="absolute inset-0 bg-gradient-to-br from-stage-ribbon/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
       <div className="relative flex items-center justify-between">
         <div className="flex-1">
