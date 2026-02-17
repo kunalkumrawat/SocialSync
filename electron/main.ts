@@ -11,6 +11,11 @@ import { getQueueService } from './services/queue'
 import { getScheduleService } from './services/schedule'
 import { getPostingService } from './services/posting'
 import { getInstagramPublisher, getYouTubePublisher } from './services/publishing'
+import { getSmartPostingService } from './services/smartPosting/SmartPostingService'
+import { getYouTubeChannelService } from './services/youtube/YouTubeChannelService'
+import { fetchUserYouTubeChannels } from './services/youtube/YouTubeFetcher'
+import { getBulkScheduler } from './services/scheduling/BulkScheduler'
+import { dialog } from 'electron'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only applies to Windows builds with Squirrel installer
@@ -134,6 +139,19 @@ async function initializeServices() {
   const settings = getSettings()
   await settings.getAll()
   console.log('[Main] Settings loaded')
+
+  // Initialize DriveService with Google account
+  const driveService = getDriveService()
+  const googleAccount = db.get<{ account_id: string }>(
+    "SELECT account_id FROM accounts WHERE platform = 'google' LIMIT 1"
+  )
+  if (googleAccount) {
+    driveService.setAccount(googleAccount.account_id)
+    console.log('[Main] DriveService initialized with Google account')
+  } else {
+    console.log('[Main] No Google account found - DriveService not initialized')
+  }
+
 }
 
 // App lifecycle
@@ -214,6 +232,11 @@ ipcMain.handle('app:getVersion', () => {
 
 ipcMain.handle('app:getPlatform', () => {
   return process.platform
+})
+
+ipcMain.handle('app:openExternal', async (_event, url: string) => {
+  const { shell } = require('electron')
+  await shell.openExternal(url)
 })
 
 // Settings
@@ -371,6 +394,12 @@ ipcMain.handle('drive:getSelectedFolders', async () => {
   return driveService.getSelectedFolders()
 })
 
+ipcMain.handle('drive:getFolders', async () => {
+  const db = getDatabase()
+  const folders = db.all('SELECT * FROM drive_folders ORDER BY folder_name ASC')
+  return folders
+})
+
 ipcMain.handle('drive:scanContent', async () => {
   try {
     const driveService = getDriveService()
@@ -421,6 +450,75 @@ ipcMain.handle('drive:getThumbnail', async (_event, fileId: string) => {
   } catch (error) {
     console.error('[IPC] drive:getThumbnail error:', error)
     return null
+  }
+})
+
+ipcMain.handle(
+  'drive:updateMetadata',
+  async (
+    _event,
+    contentId: string,
+    metadata: {
+      title?: string
+      description?: string
+      tags?: string
+      category?: string
+      metadata_approved?: boolean
+    }
+  ) => {
+    try {
+      const driveService = getDriveService()
+      driveService.updateContentMetadata(contentId, metadata)
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC] drive:updateMetadata error:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to update metadata' }
+    }
+  }
+)
+
+// Content approval workflow
+ipcMain.handle('drive:approveContent', async (_event, contentId: string) => {
+  try {
+    const driveService = getDriveService()
+    driveService.approveContent(contentId)
+    return { success: true }
+  } catch (error) {
+    console.error('[IPC] drive:approveContent error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to approve content' }
+  }
+})
+
+ipcMain.handle('drive:rejectContent', async (_event, contentId: string, reason?: string) => {
+  try {
+    const driveService = getDriveService()
+    driveService.rejectContent(contentId, reason)
+    return { success: true }
+  } catch (error) {
+    console.error('[IPC] drive:rejectContent error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to reject content' }
+  }
+})
+
+ipcMain.handle('drive:bulkApproveContent', async (_event, contentIds: string[]) => {
+  try {
+    const driveService = getDriveService()
+    driveService.bulkApproveContent(contentIds)
+    return { success: true }
+  } catch (error) {
+    console.error('[IPC] drive:bulkApproveContent error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to bulk approve content' }
+  }
+})
+
+ipcMain.handle('drive:bulkRejectContent', async (_event, contentIds: string[], reason?: string) => {
+  try {
+    const driveService = getDriveService()
+    driveService.bulkRejectContent(contentIds, reason)
+    return { success: true }
+  } catch (error) {
+    console.error('[IPC] drive:bulkRejectContent error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to bulk reject content' }
   }
 })
 
@@ -524,6 +622,192 @@ ipcMain.handle('schedule:delete', async (_event, scheduleId: string) => {
   mainWindow?.webContents.send('schedule:updated')
 })
 
+// YouTube Channels (Multi-Channel Support)
+ipcMain.handle('youtube:channels:getAll', async () => {
+  const channelService = getYouTubeChannelService()
+  return channelService.getAllChannels()
+})
+
+ipcMain.handle('youtube:channels:sync', async () => {
+  try {
+    const result = await fetchUserYouTubeChannels()
+
+    if (!result.success || !result.channels) {
+      return { success: false, error: result.error }
+    }
+
+    // Add channels to database
+    const channelService = getYouTubeChannelService()
+
+    const db = getDatabase()
+    const youtubeAccount = db.get<{ id: string }>(
+      "SELECT id FROM accounts WHERE platform = 'youtube' LIMIT 1"
+    )
+
+    if (!youtubeAccount) {
+      return { success: false, error: 'No YouTube account found' }
+    }
+
+    let addedCount = 0
+    for (const channel of result.channels) {
+      channelService.addChannel(
+        channel.channelId,
+        channel.channelHandle || channel.channelTitle,
+        youtubeAccount.id,
+        {
+          channelName: channel.channelTitle,
+          channelUrl: channel.channelUrl,
+          dailyQuota: 6,
+        }
+      )
+      addedCount++
+    }
+
+    console.log(`[Main] Synced ${addedCount} YouTube channels`)
+    mainWindow?.webContents.send('youtube:channels:updated')
+
+    return {
+      success: true,
+      channelsFound: result.channels.length,
+      channelsAdded: addedCount
+    }
+  } catch (error) {
+    console.error('[Main] Error syncing YouTube channels:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }
+  }
+})
+
+ipcMain.handle('youtube:channels:add', async (_event, channelData: {
+  channelId: string
+  channelHandle: string
+  channelName?: string
+  channelUrl?: string
+  dailyQuota?: number
+}) => {
+  try {
+    const channelService = getYouTubeChannelService()
+
+    // Get YouTube account
+    const db = getDatabase()
+    const account = db.get<{ id: string }>('SELECT id FROM accounts WHERE platform = "youtube" LIMIT 1')
+
+    if (!account) {
+      return { success: false, error: 'No YouTube account connected' }
+    }
+
+    const id = channelService.addChannel(
+      channelData.channelId,
+      channelData.channelHandle,
+      account.id,
+      {
+        channelName: channelData.channelName,
+        channelUrl: channelData.channelUrl,
+        dailyQuota: channelData.dailyQuota,
+      }
+    )
+
+    mainWindow?.webContents.send('youtube:channels:updated')
+    return { success: true, id }
+  } catch (error) {
+    console.error('[Main] Error adding YouTube channel:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+})
+
+ipcMain.handle('youtube:channels:toggle', async (_event, channelId: string, enabled: boolean) => {
+  const channelService = getYouTubeChannelService()
+  channelService.toggleChannel(channelId, enabled)
+  mainWindow?.webContents.send('youtube:channels:updated')
+})
+
+ipcMain.handle('youtube:channels:remove', async (_event, channelId: string) => {
+  const channelService = getYouTubeChannelService()
+  channelService.removeChannel(channelId)
+  mainWindow?.webContents.send('youtube:channels:updated')
+})
+
+ipcMain.handle('youtube:channels:getStats', async () => {
+  const channelService = getYouTubeChannelService()
+  return channelService.getChannelStats()
+})
+
+ipcMain.handle('youtube:channels:linkFolder', async (_event, channelId: string, folderId: string) => {
+  const channelService = getYouTubeChannelService()
+  channelService.linkFolder(channelId, folderId)
+  mainWindow?.webContents.send('youtube:channels:updated')
+  return { success: true }
+})
+
+ipcMain.handle('youtube:channels:updateSettings', async (_event, channelId: string, settings: {
+  posting_interval_minutes?: number
+  daily_quota?: number
+  auto_post_enabled?: boolean
+}) => {
+  const channelService = getYouTubeChannelService()
+  channelService.updateChannelSettings(channelId, settings)
+  mainWindow?.webContents.send('youtube:channels:updated')
+  return { success: true }
+})
+
+ipcMain.handle('youtube:channels:getContentForChannel', async (_event, channelId: string) => {
+  const channelService = getYouTubeChannelService()
+  const channel = channelService.getChannelById(channelId)
+
+  if (!channel || !channel.drive_folder_id) {
+    return []
+  }
+
+  // Get content from this channel's folder
+  const db = getDatabase()
+  const content = db.all(
+    `SELECT * FROM content_items WHERE folder_id = ? ORDER BY discovered_at DESC`,
+    [channel.drive_folder_id]
+  )
+  return content
+})
+
+ipcMain.handle('youtube:channels:getQueueForChannel', async (_event, channelId: string) => {
+  const db = getDatabase()
+  const queue = db.all(
+    `SELECT q.*, c.filename, c.mime_type, c.drive_file_id, c.size_bytes
+     FROM queue q
+     LEFT JOIN content_items c ON q.content_id = c.id
+     WHERE q.channel_id = ? AND q.status IN ('pending', 'processing')
+     ORDER BY q.scheduled_for ASC`,
+    [channelId]
+  )
+  return queue
+})
+
+ipcMain.handle('youtube:channels:getPostedForChannel', async (_event, channelId: string) => {
+  const db = getDatabase()
+  const posted = db.all(
+    `SELECT q.*, c.filename, c.mime_type, c.drive_file_id
+     FROM queue q
+     LEFT JOIN content_items c ON q.content_id = c.id
+     WHERE q.channel_id = ? AND q.status = 'posted'
+     ORDER BY q.posted_at DESC
+     LIMIT 50`,
+    [channelId]
+  )
+  return posted
+})
+
+ipcMain.handle('youtube:channels:linkAccount', async (_event, channelId: string, accountId: string) => {
+  try {
+    const db = getDatabase()
+    db.run('UPDATE youtube_channels SET account_id = ? WHERE id = ?', [accountId, channelId])
+    mainWindow?.webContents.send('youtube:channels:updated')
+    return { success: true }
+  } catch (error) {
+    console.error('[IPC] youtube:channels:linkAccount error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to link account' }
+  }
+})
+
 ipcMain.handle('schedule:generateQueue', async (_event, daysAhead: number = 7) => {
   const scheduleService = getScheduleService()
   const result = scheduleService.generateQueueFromActiveSchedules(daysAhead)
@@ -534,6 +818,17 @@ ipcMain.handle('schedule:generateQueue', async (_event, daysAhead: number = 7) =
 ipcMain.handle('schedule:getNextTime', async (_event, platform: string) => {
   const scheduleService = getScheduleService()
   return scheduleService.getNextScheduledTime(platform as 'instagram' | 'youtube')
+})
+
+// Bulk Scheduling
+ipcMain.handle('scheduling:bulkSchedule', async (_event, daysAhead: number = 30) => {
+  const scheduler = getBulkScheduler()
+  return scheduler.scheduleNextDays(daysAhead)
+})
+
+ipcMain.handle('scheduling:getStatus', async () => {
+  const scheduler = getBulkScheduler()
+  return scheduler.getScheduleStatus()
 })
 
 // Activity log
@@ -574,6 +869,122 @@ ipcMain.handle('posting:getStatus', async () => {
 ipcMain.handle('posting:postNow', async (_event, queueId: string) => {
   const postingService = getPostingService()
   return await postingService.postNow(queueId)
+})
+
+// Safety settings (dry-run, rate limiting, etc.)
+ipcMain.handle('safety:getDryRunMode', async () => {
+  const db = getDatabase()
+  const setting = db.get<{ value: string }>(" SELECT value FROM settings WHERE key = 'dry_run_mode'")
+  return setting?.value === 'true'
+})
+
+ipcMain.handle('safety:setDryRunMode', async (_event, enabled: boolean) => {
+  const db = getDatabase()
+  db.run(
+    "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('dry_run_mode', ?, CURRENT_TIMESTAMP)",
+    [enabled.toString()]
+  )
+  console.log(`[Safety] Dry-run mode ${enabled ? 'ENABLED' : 'DISABLED'}`)
+  return { success: true }
+})
+
+ipcMain.handle('safety:getRateLimit', async () => {
+  const db = getDatabase()
+  const setting = db.get<{ value: string }>(
+    "SELECT value FROM settings WHERE key = 'rate_limit_per_hour'"
+  )
+  return parseInt(setting?.value || '10')
+})
+
+ipcMain.handle('safety:setRateLimit', async (_event, limit: number) => {
+  const db = getDatabase()
+  db.run(
+    "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('rate_limit_per_hour', ?, CURRENT_TIMESTAMP)",
+    [limit.toString()]
+  )
+  console.log(`[Safety] Rate limit set to ${limit} posts/hour`)
+  return { success: true }
+})
+
+// Smart Posting / Logo Detection
+ipcMain.handle('smartPosting:getSettings', async () => {
+  const smartPosting = getSmartPostingService()
+  return smartPosting.getSettings()
+})
+
+ipcMain.handle('smartPosting:updateSettings', async (_event, settings) => {
+  const smartPosting = getSmartPostingService()
+  smartPosting.updateSettings(settings)
+  return { success: true }
+})
+
+ipcMain.handle('smartPosting:uploadLogo', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg'] }
+    ],
+    title: 'Select STAGE Logo Reference'
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false, error: 'No file selected' }
+  }
+
+  try {
+    const smartPosting = getSmartPostingService()
+    const logoPath = await smartPosting.uploadLogo(result.filePaths[0])
+    return { success: true, path: logoPath }
+  } catch (error) {
+    console.error('[IPC] Logo upload error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Upload failed' }
+  }
+})
+
+ipcMain.handle('smartPosting:scanVideo', async (_event, contentId: string, videoPath: string) => {
+  try {
+    const smartPosting = getSmartPostingService()
+    const result = await smartPosting.checkVideoForLogo(videoPath)
+    smartPosting.updateContentLogoStatus(contentId, result)
+    return { success: true, result }
+  } catch (error) {
+    console.error('[IPC] Video scan error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Scan failed' }
+  }
+})
+
+// Manual logo marking (for manual review workflow)
+ipcMain.handle('smartPosting:markLogoStatus', async (_event, contentId: string, hasLogo: boolean) => {
+  try {
+    const smartPosting = getSmartPostingService()
+    smartPosting.manuallyMarkLogoStatus(contentId, hasLogo)
+    return { success: true }
+  } catch (error) {
+    console.error('[IPC] Mark logo status error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to mark logo status' }
+  }
+})
+
+ipcMain.handle('smartPosting:bulkMarkLogoStatus', async (_event, contentIds: string[], hasLogo: boolean) => {
+  try {
+    const smartPosting = getSmartPostingService()
+    smartPosting.bulkMarkLogoStatus(contentIds, hasLogo)
+    return { success: true }
+  } catch (error) {
+    console.error('[IPC] Bulk mark logo status error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to bulk mark logo status' }
+  }
+})
+
+ipcMain.handle('smartPosting:getContentLogoStatus', async (_event, contentId: string) => {
+  try {
+    const smartPosting = getSmartPostingService()
+    const status = smartPosting.getContentLogoStatus(contentId)
+    return { success: true, status }
+  } catch (error) {
+    console.error('[IPC] Get logo status error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get logo status' }
+  }
 })
 
 // Helper to log activity

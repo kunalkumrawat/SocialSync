@@ -1052,9 +1052,12 @@ function DetailModal({
         setItems(allQueue)
       }
     } catch (error) {
-      toast.error('Failed to load items')
+      console.error('DetailModal load error:', error)
+      toast.error(`Failed to load ${type} items`)
+      setItems([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const getTitle = () => {
@@ -1098,7 +1101,7 @@ function DetailModal({
               {items.map((item) => (
                 <div key={item.id} className="flex items-center justify-between p-4 bg-stage-gray-600 rounded-lg hover:bg-stage-gray-500 transition-colors">
                   <div className="flex-1">
-                    <p className="font-medium">{item.filename}</p>
+                    <p className="font-medium">{item.filename || item.title || 'Untitled'}</p>
                     <div className="flex gap-4 text-sm text-gray-400 mt-1">
                       {type === 'content' && (
                         <>

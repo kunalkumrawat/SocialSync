@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type View = 'dashboard' | 'content' | 'queue' | 'schedule' | 'posted' | 'settings'
+export type View = 'dashboard' | 'channels' | 'settings'
 
 export interface Account {
   id: string
@@ -36,12 +36,32 @@ export interface ContentItem {
   created_at: string
   discovered_at: string
   status: 'pending' | 'queued' | 'posted' | 'failed' | 'skipped'
+
+  // Smart Posting / Logo Detection
+  logo_detected?: number | null // 0=no logo, 1=has logo, null=not checked
+  logo_confidence?: number | null
+  logo_checked_at?: string | null
+
+  // Approval Workflow
+  approval_status?: 'pending_review' | 'approved' | 'rejected'
+  approved_by?: string | null
+  approved_at?: string | null
+  rejection_reason?: string | null
+
+  // Metadata
+  title?: string | null
+  description?: string | null
+  tags?: string | null
+  category?: string | null
+  metadata_approved?: number // 0 or 1
 }
 
 export interface AppState {
   // Navigation
   currentView: View
   setCurrentView: (view: View) => void
+  selectedChannelId: string | null
+  setSelectedChannelId: (channelId: string | null) => void
 
   // App info
   appVersion: string
@@ -86,6 +106,8 @@ export const useAppStore = create<AppState>((set) => ({
   // Navigation
   currentView: 'dashboard',
   setCurrentView: (view) => set({ currentView: view }),
+  selectedChannelId: null,
+  setSelectedChannelId: (selectedChannelId) => set({ selectedChannelId }),
 
   // App info
   appVersion: '0.0.0',

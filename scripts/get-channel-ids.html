@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Channel ID Finder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: #ffffff;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #e10d37;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #999;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+
+        .section {
+            background: #2d2d2d;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 2px solid #e10d37;
+            box-shadow: 0 8px 32px rgba(225, 13, 55, 0.3);
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #e10d37;
+            font-weight: 600;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #1a1a1a;
+            border: 2px solid #444;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #e10d37;
+        }
+
+        .channel-list {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .channel-item {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+
+        .channel-handle {
+            font-size: 18px;
+            font-weight: 600;
+            color: #e10d37;
+            margin-bottom: 5px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #e10d37 0%, #7a0600 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 16px rgba(225, 13, 55, 0.4);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(225, 13, 55, 0.6);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results {
+            margin-top: 30px;
+        }
+
+        .result-item {
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #22c55e;
+        }
+
+        .result-handle {
+            font-size: 18px;
+            font-weight: 600;
+            color: #e10d37;
+            margin-bottom: 8px;
+        }
+
+        .result-id {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: #22c55e;
+            background: #0a0a0a;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-top: 8px;
+            word-break: break-all;
+        }
+
+        .result-name {
+            color: #999;
+            font-size: 14px;
+        }
+
+        .error {
+            background: #7a0600;
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #065f46;
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .code-block {
+            background: #0a0a0a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid #444;
+            position: relative;
+        }
+
+        .code-block pre {
+            color: #22c55e;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #e10d37;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .instructions {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .instructions h3 {
+            color: #3b82f6;
+            margin-bottom: 10px;
+        }
+
+        .instructions ol {
+            margin-left: 20px;
+            color: #ccc;
+        }
+
+        .instructions li {
+            margin-bottom: 8px;
+        }
+
+        .instructions a {
+            color: #3b82f6;
+            text-decoration: none;
+        }
+
+        .instructions a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 YouTube Channel ID Finder</h1>
+        <p class="subtitle">Find real YouTube channel IDs for multi-channel posting</p>
+
+        <div class="instructions">
+            <h3>📝 Instructions:</h3>
+            <ol>
+                <li>Get a YouTube Data API v3 key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></li>
+                <li>Make sure YouTube Data API v3 is enabled in your project</li>
+                <li>Paste your API key below and click "Fetch Channel IDs"</li>
+                <li>Copy the generated code and update your app</li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <div class="input-group">
+                <label for="apiKey">YouTube Data API Key</label>
+                <input type="text" id="apiKey" placeholder="AIzaSy..." autocomplete="off">
+            </div>
+
+            <div class="channel-list">
+                <div class="channel-item">
+                    <div class="channel-handle">@stage_promos</div>
+                </div>
+                <div class="channel-item">
+                    <div class="channel-handle">@stage_shortss</div>
+                </div>
+                <div class="channel-item">
+                    <div class="channel-handle">@STAGE_Reelss</div>
+                </div>
+                <div class="channel-item">
+                    <div class="channel-handle">@STAGE_Dramas</div>
+                </div>
+                <div class="channel-item">
+                    <div class="channel-handle">@STAGE_Cinema</div>
+                </div>
+                <div class="channel-item">
+                    <div class="channel-handle">@kunalkumrawat09</div>
+                </div>
+            </div>
+
+            <button id="fetchBtn" onclick="fetchAllChannelIds()">Fetch Channel IDs</button>
+        </div>
+
+        <div id="resultsContainer"></div>
+    </div>
+
+    <script>
+        const channelHandles = [
+            '@stage_promos',
+            '@stage_shortss',
+            '@STAGE_Reelss',
+            '@STAGE_Dramas',
+            '@STAGE_Cinema',
+            '@kunalkumrawat09'
+        ];
+
+        async function fetchChannelId(handle, apiKey) {
+            const cleanHandle = handle.replace('@', '');
+            const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(cleanHandle)}&key=${apiKey}&maxResults=1`;
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error.message);
+            }
+
+            if (data.items && data.items.length > 0) {
+                return {
+                    handle: handle,
+                    channelId: data.items[0].snippet.channelId,
+                    channelTitle: data.items[0].snippet.title
+                };
+            } else {
+                throw new Error(`Channel not found: ${handle}`);
+            }
+        }
+
+        async function fetchAllChannelIds() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const resultsContainer = document.getElementById('resultsContainer');
+            const fetchBtn = document.getElementById('fetchBtn');
+
+            if (!apiKey) {
+                resultsContainer.innerHTML = '<div class="error">❌ Please enter your YouTube Data API key</div>';
+                return;
+            }
+
+            fetchBtn.disabled = true;
+            fetchBtn.innerHTML = '<span class="loading"></span> Fetching...';
+            resultsContainer.innerHTML = '';
+
+            const results = [];
+            const errors = [];
+
+            for (const handle of channelHandles) {
+                try {
+                    const result = await fetchChannelId(handle, apiKey);
+                    results.push(result);
+
+                    // Add delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (error) {
+                    errors.push({ handle, error: error.message });
+                }
+            }
+
+            // Display results
+            let html = '';
+
+            if (errors.length > 0) {
+                html += '<div class="error"><strong>⚠️ Some channels failed:</strong><br>';
+                errors.forEach(err => {
+                    html += `${err.handle}: ${err.error}<br>`;
+                });
+                html += '</div>';
+            }
+
+            if (results.length > 0) {
+                html += '<div class="success">✅ Successfully fetched ' + results.length + '/' + channelHandles.length + ' channel IDs</div>';
+
+                html += '<div class="results">';
+                results.forEach(result => {
+                    html += `
+                        <div class="result-item">
+                            <div class="result-handle">${result.handle}</div>
+                            <div class="result-name">${result.channelTitle}</div>
+                            <div class="result-id">${result.channelId}</div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+
+                // Generate code block
+                html += `
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyCode()">Copy Code</button>
+                        <pre id="codeOutput">const channels = [
+${results.map(r => `  { handle: '${r.handle}', id: '${r.channelId}', name: '${r.channelTitle}' },`).join('\n')}
+];</pre>
+                    </div>
+                `;
+            }
+
+            resultsContainer.innerHTML = html;
+            fetchBtn.disabled = false;
+            fetchBtn.textContent = 'Fetch Channel IDs';
+        }
+
+        function copyCode() {
+            const code = document.getElementById('codeOutput').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => {
+                    btn.textContent = 'Copy Code';
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>

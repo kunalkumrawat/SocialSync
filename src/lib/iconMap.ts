@@ -18,6 +18,7 @@ import {
   Lightbulb,          // Tips 💡 → Insights
   Loader2,            // Loading → Spinner
   Info,               // Info → Information
+  X,                  // Close ✕ → Close/dismiss icon
 } from 'lucide-react'
 
 export const iconMap = {
@@ -44,10 +45,12 @@ export const iconMap = {
   search: Search,
   activity: FileText,
   retry: RefreshCw,
+  refresh: RefreshCw,
   delete: Trash2,
   tips: Lightbulb,
   loading: Loader2,
   info: Info,
+  close: X,
 } as const
 
 export type IconName = keyof typeof iconMap

@@ -1,6 +1,7 @@
 export interface ElectronAPI {
   getVersion: () => Promise<string>
   getPlatform: () => Promise<string>
+  openExternal: (url: string) => Promise<void>
   onSchedulerToggle: (callback: (paused: boolean) => void) => void
   onAccountConnected: (callback: (account: unknown) => void) => void
   onAccountDisconnected: (callback: (accountId: string) => void) => void
@@ -60,6 +61,76 @@ export interface ElectronAPI {
     }) => void
   ) => void
   onPostingPaused: (callback: (paused: boolean) => void) => void
+  getSmartPostingSettings: () => Promise<{
+    enabled: boolean
+    logoReferencePath: string | null
+    sensitivity: number
+    noLogoAction: 'skip' | 'hold' | 'notify'
+  }>
+  updateSmartPostingSettings: (settings: {
+    enabled?: boolean
+    logoReferencePath?: string | null
+    sensitivity?: number
+    noLogoAction?: 'skip' | 'hold' | 'notify'
+  }) => Promise<{ success: boolean }>
+  uploadSmartPostingLogo: () => Promise<{ success: boolean; path?: string; error?: string }>
+  scanVideoForLogo: (contentId: string, videoPath: string) => Promise<{
+    success: boolean
+    result?: { detected: boolean; confidence: number; checkedAt: string }
+    error?: string
+  }>
+  // YouTube Channels
+  getYouTubeChannels: () => Promise<unknown[]>
+  syncYouTubeChannels: () => Promise<{ success: boolean; channelsFound?: number; channelsAdded?: number; error?: string }>
+  addYouTubeChannel: (channelData: {
+    channelId: string
+    channelHandle: string
+    channelName?: string
+    channelUrl?: string
+    dailyQuota?: number
+  }) => Promise<{ success: boolean; id?: string; error?: string }>
+  toggleYouTubeChannel: (channelId: string, enabled: boolean) => Promise<void>
+  removeYouTubeChannel: (channelId: string) => Promise<void>
+  getYouTubeChannelStats: () => Promise<{
+    totalChannels: number
+    enabledChannels: number
+    totalQuota: number
+    usedQuota: number
+    availableQuota: number
+  }>
+  onYouTubeChannelsUpdated: (callback: () => void) => void
+  getContentForChannel: (channelId: string) => Promise<unknown[]>
+  getQueueForChannel: (channelId: string) => Promise<unknown[]>
+  getPostedForChannel: (channelId: string) => Promise<unknown[]>
+  linkFolderToChannel: (channelId: string, folderId: string) => Promise<{ success: boolean; error?: string }>
+  updateChannelSettings: (channelId: string, settings: {
+    posting_interval_minutes?: number
+    daily_quota?: number
+    auto_post_enabled?: boolean
+  }) => Promise<{ success: boolean; error?: string }>
+  linkAccountToChannel: (channelId: string, accountId: string) => Promise<{ success: boolean; error?: string }>
+  // Content management
+  getFolders: () => Promise<unknown[]>
+  approveContent: (contentId: string) => Promise<{ success: boolean; error?: string }>
+  rejectContent: (contentId: string, reason?: string) => Promise<{ success: boolean; error?: string }>
+  bulkApproveContent: (contentIds: string[]) => Promise<{ success: boolean; error?: string }>
+  bulkRejectContent: (contentIds: string[], reason?: string) => Promise<{ success: boolean; error?: string }>
+  markContentLogoStatus: (contentId: string, hasLogo: boolean) => Promise<void>
+  bulkMarkLogoStatus: (contentIds: string[], hasLogo: boolean) => Promise<void>
+  postImmediately: (queueId: string) => Promise<{ success: boolean; error?: string }>
+  // Bulk Scheduling
+  bulkScheduleVideos: (daysAhead?: number) => Promise<{
+    success: boolean
+    totalScheduled: number
+    scheduledUntil: string | null
+    error?: string
+    details: { channelName: string; videosScheduled: number }[]
+  }>
+  getScheduleStatus: () => Promise<{
+    scheduledUntil: string | null
+    totalScheduled: number
+    byChannel: { channelName: string; count: number }[]
+  }>
 }
 
 declare global {

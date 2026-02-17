@@ -496,6 +496,45 @@ export class DriveService {
   }
 
   /**
+   * Get next available content for a specific platform
+   * Excludes content already queued for that platform
+   * CRITICAL: Only returns APPROVED content (approval_status = 'approved')
+   */
+  getNextContentForPlatform(platform: 'instagram' | 'youtube'): ContentItem | null {
+    const db = getDatabase()
+    const row = db.get<any>(
+      `SELECT * FROM content_items
+       WHERE status = 'pending'
+       AND approval_status = 'approved'
+       AND id NOT IN (
+         SELECT content_id FROM queue
+         WHERE platform = ? AND status IN ('pending', 'processing')
+       )
+       ORDER BY created_at ASC LIMIT 1`,
+      [platform]
+    )
+
+    if (!row) {
+      console.log(`[DriveService] No approved content available for ${platform}`)
+      return null
+    }
+
+    // Map snake_case to camelCase
+    return {
+      id: row.id,
+      driveFileId: row.drive_file_id,
+      folderId: row.folder_id,
+      filename: row.filename,
+      mimeType: row.mime_type,
+      sizeBytes: row.size_bytes,
+      durationSeconds: row.duration_seconds,
+      createdAt: row.created_at,
+      discoveredAt: row.discovered_at,
+      status: row.status,
+    }
+  }
+
+  /**
    * Update content item status
    */
   updateContentStatus(
@@ -504,6 +543,155 @@ export class DriveService {
   ): void {
     const db = getDatabase()
     db.run('UPDATE content_items SET status = ? WHERE id = ?', [status, contentId])
+  }
+
+  /**
+   * Update content item metadata (title, description, tags, category)
+   */
+  updateContentMetadata(
+    contentId: string,
+    metadata: {
+      title?: string
+      description?: string
+      tags?: string
+      category?: string
+      metadata_approved?: boolean
+    }
+  ): void {
+    const db = getDatabase()
+    const updates: string[] = []
+    const values: any[] = []
+
+    if (metadata.title !== undefined) {
+      updates.push('title = ?')
+      values.push(metadata.title)
+    }
+    if (metadata.description !== undefined) {
+      updates.push('description = ?')
+      values.push(metadata.description)
+    }
+    if (metadata.tags !== undefined) {
+      updates.push('tags = ?')
+      values.push(metadata.tags)
+    }
+    if (metadata.category !== undefined) {
+      updates.push('category = ?')
+      values.push(metadata.category)
+    }
+    if (metadata.metadata_approved !== undefined) {
+      updates.push('metadata_approved = ?')
+      values.push(metadata.approved ? 1 : 0)
+    }
+
+    if (updates.length > 0) {
+      values.push(contentId)
+      db.run(`UPDATE content_items SET ${updates.join(', ')} WHERE id = ?`, values)
+      console.log(`[DriveService] Updated metadata for content ${contentId}`)
+    }
+  }
+
+  /**
+   * Approve content for posting (whitelist approach)
+   */
+  approveContent(contentId: string, approvedBy: string = 'user'): void {
+    const db = getDatabase()
+    const now = new Date().toISOString()
+
+    db.run(
+      `UPDATE content_items
+       SET approval_status = 'approved', approved_by = ?, approved_at = ?, rejection_reason = NULL
+       WHERE id = ?`,
+      [approvedBy, now, contentId]
+    )
+
+    // Log approval
+    const logId = uuidv4()
+    db.run(
+      `INSERT INTO approval_log (id, content_id, action, created_at)
+       VALUES (?, ?, 'approved', ?)`,
+      [logId, contentId, now]
+    )
+
+    console.log(`[DriveService] ✅ Approved content ${contentId}`)
+  }
+
+  /**
+   * Reject content from posting
+   */
+  rejectContent(contentId: string, reason: string = 'Manual rejection'): void {
+    const db = getDatabase()
+    const now = new Date().toISOString()
+
+    db.run(
+      `UPDATE content_items
+       SET approval_status = 'rejected', rejection_reason = ?, approved_by = NULL, approved_at = NULL
+       WHERE id = ?`,
+      [reason, contentId]
+    )
+
+    // Log rejection
+    const logId = uuidv4()
+    db.run(
+      `INSERT INTO approval_log (id, content_id, action, reason, created_at)
+       VALUES (?, ?, 'rejected', ?, ?)`,
+      [logId, contentId, reason, now]
+    )
+
+    console.log(`[DriveService] ❌ Rejected content ${contentId}: ${reason}`)
+  }
+
+  /**
+   * Bulk approve multiple content items
+   */
+  bulkApproveContent(contentIds: string[], approvedBy: string = 'user'): void {
+    const db = getDatabase()
+    const now = new Date().toISOString()
+
+    for (const contentId of contentIds) {
+      db.run(
+        `UPDATE content_items
+         SET approval_status = 'approved', approved_by = ?, approved_at = ?, rejection_reason = NULL
+         WHERE id = ?`,
+        [approvedBy, now, contentId]
+      )
+
+      // Log approval
+      const logId = uuidv4()
+      db.run(
+        `INSERT INTO approval_log (id, content_id, action, created_at)
+         VALUES (?, ?, 'approved', ?)`,
+        [logId, contentId, now]
+      )
+    }
+
+    console.log(`[DriveService] ✅ Bulk approved ${contentIds.length} items`)
+  }
+
+  /**
+   * Bulk reject multiple content items
+   */
+  bulkRejectContent(contentIds: string[], reason: string = 'Bulk rejection'): void {
+    const db = getDatabase()
+    const now = new Date().toISOString()
+
+    for (const contentId of contentIds) {
+      db.run(
+        `UPDATE content_items
+         SET approval_status = 'rejected', rejection_reason = ?, approved_by = NULL, approved_at = NULL
+         WHERE id = ?`,
+        [reason, contentId]
+      )
+
+      // Log rejection
+      const logId = uuidv4()
+      db.run(
+        `INSERT INTO approval_log (id, content_id, action, reason, created_at)
+         VALUES (?, ?, 'rejected', ?, ?)`,
+        [logId, contentId, reason, now]
+      )
+    }
+
+    console.log(`[DriveService] ❌ Bulk rejected ${contentIds.length} items`)
   }
 
   /**

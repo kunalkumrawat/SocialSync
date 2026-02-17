@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import { randomUUID } from 'crypto'
 import { getDriveService } from '../drive'
 import { getDatabase } from '../database/DatabaseService'
 import { BrowserWindow } from 'electron'
@@ -65,7 +66,7 @@ class ContentScheduler {
 
   private logScanActivity(discovered: number, skipped: number) {
     const db = getDatabase()
-    const id = crypto.randomUUID()
+    const id = randomUUID()
 
     db.run(
       `INSERT INTO activity_log (id, event_type, message, metadata)

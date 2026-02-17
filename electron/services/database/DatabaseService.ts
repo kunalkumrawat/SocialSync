@@ -198,6 +198,102 @@ const migrations = [
       );
     `,
   },
+  {
+    name: '002_smart_posting',
+    sql: `
+      -- Add logo detection columns to content_items
+      ALTER TABLE content_items ADD COLUMN logo_detected INTEGER DEFAULT NULL;
+      ALTER TABLE content_items ADD COLUMN logo_confidence REAL DEFAULT NULL;
+      ALTER TABLE content_items ADD COLUMN logo_checked_at DATETIME DEFAULT NULL;
+
+      -- Add logo detection columns to queue
+      ALTER TABLE queue ADD COLUMN logo_detected INTEGER DEFAULT NULL;
+      ALTER TABLE queue ADD COLUMN logo_confidence REAL DEFAULT NULL;
+      ALTER TABLE queue ADD COLUMN logo_checked_at DATETIME DEFAULT NULL;
+    `,
+  },
+  {
+    name: '003_metadata',
+    sql: `
+      -- Add metadata columns to content_items for proper titles/descriptions
+      ALTER TABLE content_items ADD COLUMN title TEXT DEFAULT NULL;
+      ALTER TABLE content_items ADD COLUMN description TEXT DEFAULT NULL;
+      ALTER TABLE content_items ADD COLUMN tags TEXT DEFAULT NULL;
+      ALTER TABLE content_items ADD COLUMN category TEXT DEFAULT NULL;
+      ALTER TABLE content_items ADD COLUMN metadata_approved INTEGER DEFAULT 0;
+    `,
+  },
+  {
+    name: '004_approval_workflow',
+    sql: `
+      -- Add approval status for content filtering workflow
+      ALTER TABLE content_items ADD COLUMN approval_status TEXT DEFAULT 'pending_review';
+      ALTER TABLE content_items ADD COLUMN approved_by TEXT DEFAULT NULL;
+      ALTER TABLE content_items ADD COLUMN approved_at DATETIME DEFAULT NULL;
+      ALTER TABLE content_items ADD COLUMN rejection_reason TEXT DEFAULT NULL;
+
+      -- Create approval audit log table
+      CREATE TABLE IF NOT EXISTS approval_log (
+        id TEXT PRIMARY KEY,
+        content_id TEXT REFERENCES content_items(id),
+        action TEXT NOT NULL,
+        reason TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `,
+  },
+  {
+    name: '005_multi_channel',
+    sql: `
+      -- YouTube Channels table for multi-channel posting
+      CREATE TABLE IF NOT EXISTS youtube_channels (
+        id TEXT PRIMARY KEY,
+        channel_id TEXT NOT NULL UNIQUE,
+        channel_handle TEXT,
+        channel_name TEXT,
+        channel_url TEXT,
+        account_id TEXT REFERENCES accounts(id),
+        daily_quota INTEGER DEFAULT 6,
+        posts_today INTEGER DEFAULT 0,
+        enabled INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_reset_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Add channel_id to queue table to track which channel posted
+      ALTER TABLE queue ADD COLUMN channel_id TEXT DEFAULT NULL;
+
+      -- Insert default settings for multi-channel distribution
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('distribution_strategy', 'round-robin');
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('posts_per_channel_per_day', '6');
+    `,
+  },
+  {
+    name: '006_channel_workspaces',
+    sql: `
+      -- Link each YouTube channel to its own Google Drive folder
+      ALTER TABLE youtube_channels ADD COLUMN drive_folder_id TEXT DEFAULT NULL;
+
+      -- Add channel workspace settings
+      ALTER TABLE youtube_channels ADD COLUMN posting_interval_minutes INTEGER DEFAULT 30;
+      ALTER TABLE youtube_channels ADD COLUMN auto_post_enabled INTEGER DEFAULT 1;
+
+      -- Update drive_folders to optionally link to channel
+      ALTER TABLE drive_folders ADD COLUMN channel_id TEXT DEFAULT NULL;
+    `,
+  },
+  {
+    name: '007_youtube_scheduled_publishing',
+    sql: `
+      -- Add scheduled publish support for YouTube native scheduling
+      ALTER TABLE queue ADD COLUMN youtube_scheduled_publish_at DATETIME DEFAULT NULL;
+      ALTER TABLE queue ADD COLUMN youtube_video_url TEXT DEFAULT NULL;
+
+      -- Track scheduling horizon
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('youtube_scheduled_until', '');
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('last_bulk_schedule_at', '');
+    `,
+  },
 ]
 
 // Singleton instance

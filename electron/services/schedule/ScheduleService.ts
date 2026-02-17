@@ -136,30 +136,25 @@ export class ScheduleService {
   }
 
   /**
-   * Generate queue items from active schedules
-   * This should be called when:
-   * - A schedule is created/updated
-   * - Content is added
-   * - Periodically (daily) to maintain queue
+   * Generate queue items automatically every 30 minutes
+   * This replaces manual schedule-based generation with automatic posting
+   * Maintains a rolling queue of approved content
    */
   generateQueueFromActiveSchedules(daysAhead: number = 7): {
     instagram: number
     youtube: number
   } {
-    const schedules = this.getAllSchedules().filter((s) => s.enabled)
     const queueService = getQueueService()
-
-    const startDate = new Date()
-    const endDate = new Date()
-    endDate.setDate(endDate.getDate() + daysAhead)
-
     const result = { instagram: 0, youtube: 0 }
 
-    for (const schedule of schedules) {
-      const count = queueService.generateQueueFromSchedule(schedule.id, startDate, endDate)
-      result[schedule.platform] += count
+    // Generate for Instagram only (YouTube uses BulkScheduler for scheduled publishing)
+    const platforms: ('instagram' | 'youtube')[] = ['instagram']
+
+    for (const platform of platforms) {
+      const count = queueService.generateAutomaticQueue(platform, 30) // 30 minutes interval
+      result[platform] += count
       console.log(
-        `[ScheduleService] Generated ${count} queue items for ${schedule.platform}`
+        `[ScheduleService] Auto-generated ${count} queue items for ${platform} (30min intervals)`
       )
     }
 
