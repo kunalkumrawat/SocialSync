@@ -1,14 +1,21 @@
 import cron from 'node-cron'
 import { getQueueService } from '../queue'
 import { getDriveService } from '../drive'
+import { getDatabase } from '../database/DatabaseService'
 import { logActivity } from '../../main'
 import { BrowserWindow } from 'electron'
 
 export interface Publisher {
-  publish(contentId: string, filePath: string, metadata?: Record<string, unknown>): Promise<{
+  publish(
+    contentId: string,
+    filePath: string,
+    metadata?: Record<string, unknown>,
+    scheduledPublishAt?: string
+  ): Promise<{
     success: boolean
     postId?: string
     error?: string
+    scheduledFor?: string
   }>
 }
 
@@ -91,7 +98,30 @@ export class PostingService {
     this.isProcessing = true
 
     try {
+      const db = getDatabase()
       const queueService = getQueueService()
+
+      // Check rate limiting
+      const rateLimitSetting = db.get<{ value: string }>(
+        "SELECT value FROM settings WHERE key = 'rate_limit_per_hour'"
+      )
+      const rateLimit = parseInt(rateLimitSetting?.value || '10')
+
+      // Count posts in last hour
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      const recentPosts = db.get<{ count: number }>(
+        `SELECT COUNT(*) as count FROM queue WHERE status = 'posted' AND posted_at >= ?`,
+        [oneHourAgo]
+      )
+
+      if (recentPosts && recentPosts.count >= rateLimit) {
+        console.log(
+          `[PostingService] ⚠️ Rate limit reached (${recentPosts.count}/${rateLimit} posts in last hour). Waiting...`
+        )
+        this.isProcessing = false
+        return
+      }
+
       const dueItems = queueService.getDueQueueItems()
 
       if (dueItems.length === 0) {
@@ -103,6 +133,16 @@ export class PostingService {
 
       // Process items one at a time to avoid rate limits
       for (const item of dueItems) {
+        // Re-check rate limit for each item
+        const currentPosts = db.get<{ count: number }>(
+          `SELECT COUNT(*) as count FROM queue WHERE status = 'posted' AND posted_at >= ?`,
+          [oneHourAgo]
+        )
+        if (currentPosts && currentPosts.count >= rateLimit) {
+          console.log(`[PostingService] Rate limit reached mid-processing. Stopping.`)
+          break
+        }
+
         await this.processQueueItem(item)
         // Wait 10 seconds between posts to avoid rate limits
         await this.sleep(10000)
@@ -124,6 +164,7 @@ export class PostingService {
     drive_file_id: string
     filename: string
     attempts: number
+    scheduled_for?: string
   }) {
     const queueService = getQueueService()
     const driveService = getDriveService()
@@ -155,12 +196,59 @@ export class PostingService {
       )
       const filePath = await driveService.downloadFile(item.drive_file_id, item.filename)
 
-      // Publish
-      console.log(`[PostingService] Publishing ${item.filename} to ${item.platform}...`)
-      const result = await publisher.publish(item.content_id, filePath, {
-        queueId: item.id,
-        platform: item.platform,
-      })
+      // Fetch content metadata from database
+      const db = getDatabase()
+      const contentMeta = db.get<{
+        title: string | null
+        description: string | null
+        tags: string | null
+        category: string | null
+      }>('SELECT title, description, tags, category FROM content_items WHERE id = ?', [
+        item.content_id,
+      ])
+
+      // Check dry-run mode
+      const dryRunSetting = db.get<{ value: string }>(
+        "SELECT value FROM settings WHERE key = 'dry_run_mode'"
+      )
+      const isDryRun = dryRunSetting?.value === 'true'
+
+      let result: { success: boolean; postId?: string; error?: string }
+
+      if (isDryRun) {
+        // DRY RUN MODE: Simulate posting without actually posting
+        console.log(
+          `[PostingService] 🔷 DRY RUN: Would publish ${item.filename} to ${item.platform}`
+        )
+        console.log(`[PostingService] 🔷 DRY RUN: Title: "${contentMeta?.title || 'No title'}"`)
+        console.log(
+          `[PostingService] 🔷 DRY RUN: Description: "${contentMeta?.description?.substring(0, 50) || 'No description'}..."`
+        )
+
+        // Simulate success after 2 seconds
+        await this.sleep(2000)
+        result = {
+          success: true,
+          postId: `dry-run-${Date.now()}`,
+        }
+      } else {
+        // REAL POSTING: Actually publish to platform
+        console.log(`[PostingService] Publishing ${item.filename} to ${item.platform}...`)
+
+        // For YouTube, use scheduled publishing with the scheduled_for time
+        const scheduledPublishAt = item.platform === 'youtube' && item.scheduled_for
+          ? item.scheduled_for
+          : undefined
+
+        result = await publisher.publish(item.content_id, filePath, {
+          queueId: item.id,
+          platform: item.platform,
+          title: contentMeta?.title || undefined,
+          description: contentMeta?.description || undefined,
+          tags: contentMeta?.tags || undefined,
+          category: contentMeta?.category || undefined,
+        }, scheduledPublishAt)
+      }
 
       // Cleanup downloaded file
       driveService.cleanupFile(filePath)

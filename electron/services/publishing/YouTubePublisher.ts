@@ -11,12 +11,14 @@ const YOUTUBE_UPLOAD_BASE = 'https://www.googleapis.com/upload/youtube/v3'
 export class YouTubePublisher implements Publisher {
   /**
    * Publish a video as a YouTube Short
+   * @param scheduledPublishAt - Optional ISO 8601 timestamp for scheduled publishing (e.g., "2026-02-15T10:30:00Z")
    */
   async publish(
     contentId: string,
     filePath: string,
-    metadata?: Record<string, unknown>
-  ): Promise<{ success: boolean; postId?: string; error?: string }> {
+    metadata?: Record<string, unknown>,
+    scheduledPublishAt?: string
+  ): Promise<{ success: boolean; postId?: string; error?: string; scheduledFor?: string }> {
     try {
       // Get YouTube account details
       const db = getDatabase()
@@ -36,17 +38,22 @@ export class YouTubePublisher implements Publisher {
         return { success: false, error: 'Failed to get YouTube access token' }
       }
 
-      console.log('[YouTubePublisher] Starting upload...')
-
-      // Upload video
-      const videoId = await this.uploadVideo(filePath, accessToken, metadata)
-
-      if (!videoId) {
-        return { success: false, error: 'Failed to upload video' }
+      if (scheduledPublishAt) {
+        console.log(`[YouTubePublisher] Uploading as SCHEDULED for: ${scheduledPublishAt}`)
+      } else {
+        console.log('[YouTubePublisher] Uploading as IMMEDIATE publish...')
       }
 
-      console.log('[YouTubePublisher] ✅ Successfully published:', videoId)
-      return { success: true, postId: videoId }
+      // Upload video (will throw error if fails)
+      const videoId = await this.uploadVideo(filePath, accessToken, metadata, scheduledPublishAt)
+
+      if (scheduledPublishAt) {
+        console.log(`[YouTubePublisher] ✅ Scheduled for ${scheduledPublishAt}:`, videoId)
+        return { success: true, postId: videoId, scheduledFor: scheduledPublishAt }
+      } else {
+        console.log('[YouTubePublisher] ✅ Successfully published:', videoId)
+        return { success: true, postId: videoId }
+      }
     } catch (error) {
       console.error('[YouTubePublisher] Error:', error)
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -85,27 +92,41 @@ export class YouTubePublisher implements Publisher {
   private async uploadVideo(
     filePath: string,
     accessToken: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
+    scheduledPublishAt?: string
   ): Promise<string | null> {
     try {
       const filename = filePath.split('/').pop() || 'video.mp4'
       const formattedTitle = this.formatTitle(filename)
-      const title = metadata?.title || formattedTitle
-      const description = metadata?.description || ''
 
-      console.log(`[YouTubePublisher] Formatted title: "${formattedTitle}" from filename: "${filename}"`)
+      // Use metadata from database (passed through metadata object)
+      // If no metadata.title provided, use formatted filename as fallback
+      const title = (metadata?.title as string) || formattedTitle
+      const description = (metadata?.description as string) || ''
+      const tags = (metadata?.tags as string) || ''
+
+      console.log(`[YouTubePublisher] Title: "${title}", Description: "${description?.substring(0, 50)}...", Tags: "${tags}"`)
+
+      // Add tags to description if provided
+      const fullDescription = tags ? `${description}\n\n${tags}` : description
 
       // Step 1: Initialize resumable upload
-      const videoMetadata = {
+      const videoMetadata: any = {
         snippet: {
-          title: `${title} #Shorts`,
-          description: `${description}\n\n#Shorts`,
+          title: title.length > 100 ? title.substring(0, 97) + '...' : title, // YouTube title max 100 chars
+          description: `${fullDescription}\n\n#Shorts`,
           categoryId: '22', // People & Blogs
         },
         status: {
-          privacyStatus: 'public',
+          privacyStatus: scheduledPublishAt ? 'private' : 'public',
           selfDeclaredMadeForKids: false,
         },
+      }
+
+      // Add publishAt for scheduled videos
+      if (scheduledPublishAt) {
+        videoMetadata.status.publishAt = scheduledPublishAt
+        console.log(`[YouTubePublisher] Setting publishAt: ${scheduledPublishAt}`)
       }
 
       const initResponse = await axios.post(
@@ -160,8 +181,15 @@ export class YouTubePublisher implements Publisher {
       console.error('[YouTubePublisher] Upload error:', error)
       if (axios.isAxiosError(error)) {
         console.error('Response:', error.response?.data)
+
+        // Extract the actual error message from YouTube API
+        const youtubeError = error.response?.data?.error
+        if (youtubeError?.message) {
+          throw new Error(youtubeError.message)
+        }
       }
-      return null
+
+      throw error instanceof Error ? error : new Error('Failed to upload video to YouTube')
     }
   }
 

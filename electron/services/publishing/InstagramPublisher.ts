@@ -14,8 +14,9 @@ export class InstagramPublisher implements Publisher {
   async publish(
     contentId: string,
     filePath: string,
-    metadata?: Record<string, unknown>
-  ): Promise<{ success: boolean; postId?: string; error?: string }> {
+    metadata?: Record<string, unknown>,
+    scheduledPublishAt?: string
+  ): Promise<{ success: boolean; postId?: string; error?: string; scheduledFor?: string }> {
     try {
       // Get Instagram account details
       const db = getDatabase()
