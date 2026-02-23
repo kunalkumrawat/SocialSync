@@ -269,6 +269,6 @@ For issues, questions, or feature requests:
 
 ---
 
-**Made with ❤️ by BMad**
+**Built by [Kunal Kumrawat](https://github.com/kunalkumrawat) with ❤️ using BMad**
 
 *Automate your social media presence. Focus on creating great content.*
